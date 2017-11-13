@@ -1,18 +1,34 @@
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include <cstring>
-
 #include <cstdlib>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
 
 void usage (char** argv) {
-    std::cerr << "Usage: " << argv[0] << " [-a] <directory name>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " [-av] <directory name>" << std::endl;
 }
 
-void scan_dir (const char* dirname, bool skip_dot, bool verbose) {
+void write_file_entry (const char* filename, std::ofstream & fout, const struct stat filesize, size_t blocksize) {
+    std::ifstream fin(filename, std::ios_base::binary | std::ios_base::in);
+    fout.write(filename, strlen(filename)+1);
+    fout.write((char*)&(filesize.st_size), sizeof(off_t));
+    fout.write((char*)&(filesize.st_mode), sizeof(mode_t));
+    do {
+        char* buf = new char[blocksize];
+        fin.read(buf, blocksize);
+        if (fin.eof()) break;
+        fout.write(buf, blocksize);
+        delete[] buf;
+    } while (!fin.eof());
+    fin.close();
+}
+
+void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool verbose) {
     DIR* dir = nullptr;
     struct dirent entry;
     struct dirent *entryptr = nullptr;
@@ -42,11 +58,12 @@ void scan_dir (const char* dirname, bool skip_dot, bool verbose) {
             if (skip_dot ? (strncmp(entry.d_name, ".", 1) != 0) : true) 
             {
                 // print info about entry
-                printf("%8lld %s\n", entryinfo.st_size, full_name);
+                if (verbose) printf("%8lld %s\n", entryinfo.st_size, full_name);
+                write_file_entry(full_name, fout, entryinfo, 1);
                 
                 // if entry is a directory, then recursive call for this directory
                 if (S_ISDIR(entryinfo.st_mode)) 
-                    scan_dir(full_name, skip_dot, verbose);
+                    scan_dir(full_name, fout, skip_dot, verbose);
             }         
         }       
         delete[] full_name;
@@ -77,9 +94,10 @@ int main (int argc, char** argv) {
         opt = getopt(argc, argv, opt_string);
     }
 
+    std::ofstream fout("out.ak", std::ios_base::out | std::ios_base::binary);
     for (int i = optind; i < argc; i++)
-        scan_dir(argv[i], skip, verbose);
+        scan_dir(argv[i], fout, skip, verbose);
+    fout.close();
+
     return 0;
 }
-
-// читать вместо файла блок с файлом
