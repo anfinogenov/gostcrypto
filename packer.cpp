@@ -111,18 +111,18 @@ int main (int argc, char** argv)
     for (int i = optind; i < argc; i++) 
     {
         DIR* dir;
-        dir = opendir(argv[1]);
+        dir = opendir(argv[i]);
         if (dir == nullptr) 
         {
-            fprintf(stderr, "Error opening directory %s: %s\n", argv[1], strerror(errno));
+            fprintf(stderr, "Error opening directory %s: %s\n", argv[i], strerror(errno));
             return EXIT_FAILURE;
         } 
         else 
         {
-            if (verbose) printf("Found directory: %s\n", argv[1]);
+            if (verbose) printf("Found directory: %s\n", argv[i]);
             struct stat entry_dir_stat;
-            lstat(argv[1], &entry_dir_stat);
-            write_file_entry(argv[1], fout, entry_dir_stat, 1);
+            lstat(argv[i], &entry_dir_stat);
+            write_file_entry(argv[i], fout, entry_dir_stat, 1);
             scan_dir(argv[i], fout, skip, verbose);
         }
     }
