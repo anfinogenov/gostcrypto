@@ -4,8 +4,17 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
-void unpack (std::ifstream & fin) {
-    while (!fin.eof()) {
+void usage (char** argv) 
+{
+    std::cerr << "Usage: " << argv[0] << " <archive name>" << std::endl;
+}
+
+// TODO: optimized IO (while !eof read block, 
+//                     parse block and write out parsed data)
+void unpack (std::ifstream & fin) 
+{
+    while (!fin.eof()) 
+    {
         char* buf = new char[PATH_MAX];
         fin.getline(buf, PATH_MAX, '\0');
         off_t size = 0;
@@ -23,22 +32,21 @@ void unpack (std::ifstream & fin) {
                 fout.write(&tmp, 1);
             }
             fout.close();
-            /*
-            char tmp = '\0';
-            while (tmp != '.') {
-                fin.read(&tmp, 1);
-                if (fin.eof()) return;
-            }
-            fin.putback(tmp);
-            */
         }
     }
 }
 
 int main (int argc, char** argv) {
-    if (argc < 2) exit(1);
+    if (argc < 2) 
+    {
+        usage(argv);
+        exit(EXIT_FAILURE);
+    }
+
     std::ifstream fin(argv[1], std::ios_base::binary | std::ios_base::in);
     unpack(fin);
+    
     fin.close();
+
     return 0;
 }

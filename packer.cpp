@@ -9,33 +9,45 @@
 #include <dirent.h>
 #include <unistd.h>
 
-void usage (char** argv) {
+void usage (char** argv) 
+{
     std::cerr << "Usage: " << argv[0] << " [-av] <directory name>" << std::endl;
 }
 
-void write_file_entry (const char* filename, std::ofstream & fout, const struct stat filesize, size_t blocksize) {
+void write_file_entry (const char* filename, std::ofstream & fout, const struct stat filestat, size_t blocksize) 
+{
     std::ifstream fin(filename, std::ios_base::binary | std::ios_base::in);
-    fout.write(filename, strlen(filename)+1);
-    fout.write((char*)&(filesize.st_size), sizeof(off_t));
-    fout.write((char*)&(filesize.st_mode), sizeof(mode_t));
-    do {
-        char* buf = new char[blocksize];
-        fin.read(buf, blocksize);
-        if (fin.eof()) break;
-        fout.write(buf, blocksize);
-        delete[] buf;
-    } while (!fin.eof());
+
+    fout.write(filename, strlen(filename)+1);                   // direntry name
+    fout.write((char*)&(filestat.st_size), sizeof(off_t));      // direntry size (in bytes)
+    fout.write((char*)&(filestat.st_mode), sizeof(mode_t));     // direntry mode (dir, file etc.)
+
+    do 
+    {
+        char* buf = new char[blocksize];                        // create new buffer for optimized IO (now 1 byte wide)
+        if (!fin.read(buf, blocksize))                          // read block from file, associated with entry
+        {
+            delete[] buf;
+            break;                   
+        }
+        fout.write(buf, blocksize);                             // write block to archive
+        delete[] buf;                                           
+    } 
+    while (true);
+
     fin.close();
 }
 
-void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool verbose) {
+void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool verbose) 
+{
     DIR* dir = nullptr;
     struct dirent entry;
     struct dirent *entryptr = nullptr;
     int retval = 0;
     
     dir = opendir(dirname);
-    if (dir == nullptr) {
+    if (dir == nullptr) 
+    {
         fprintf(stderr, "Error opening directory %s: %s\n", dirname, strerror(errno));
         return;
     }
@@ -71,7 +83,8 @@ void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool ve
     closedir(dir);
 }
 
-int main (int argc, char** argv) {
+int main (int argc, char** argv) 
+{
     int opt = 0;
     char opt_string[] = "av?";
     bool skip = true, verbose = false;
@@ -95,9 +108,25 @@ int main (int argc, char** argv) {
     }
 
     std::ofstream fout("out.ak", std::ios_base::out | std::ios_base::binary);
-    for (int i = optind; i < argc; i++)
-        scan_dir(argv[i], fout, skip, verbose);
+    for (int i = optind; i < argc; i++) 
+    {
+        DIR* dir;
+        dir = opendir(argv[1]);
+        if (dir == nullptr) 
+        {
+            fprintf(stderr, "Error opening directory %s: %s\n", argv[1], strerror(errno));
+            return EXIT_FAILURE;
+        } 
+        else 
+        {
+            if (verbose) printf("Found directory: %s\n", argv[1]);
+            struct stat entry_dir_stat;
+            lstat(argv[1], &entry_dir_stat);
+            write_file_entry(argv[1], fout, entry_dir_stat, 1);
+            scan_dir(argv[i], fout, skip, verbose);
+        }
+    }
     fout.close();
 
-    return 0;
+    return EXIT_SUCCESS;
 }
