@@ -9,6 +9,7 @@
 
 #define DEBUG
 //inner functions
+static uint8_t* _hash_generate(const int mode, const uint8_t* data, size_t len);
 static uint8_t* _xor_block(uint8_t* res, const uint8_t* a, const uint8_t* b);
 static uint8_t* _s_block(uint8_t* res, const uint8_t* a);
 static uint8_t* _p_block(uint8_t* res, const uint8_t* a);
@@ -66,7 +67,7 @@ int main()
         0xeb, 0xfa, 0xea, 0xfb, 0x20, 0xc8, 0xe3, 0xee, 0xf0, 0xe5,
         0xe2, 0xfb
     };
-    uint8_t r1[64] = {
+    uint8_t r1[64] = { //msg1, 512 bit
         0x1b, 0x54, 0xd0, 0x1a, 0x4a, 0xf5, 0xb9, 0xd5, 0xcc, 0x3d,
         0x86, 0xd6, 0x8d, 0x28, 0x54, 0x62, 0xb1, 0x9a, 0xbc, 0x24,
         0x75, 0x22, 0x2f, 0x35, 0xc0, 0x85, 0x12, 0x2b, 0xe4, 0xba,
@@ -75,7 +76,13 @@ int main()
         0x81, 0x33, 0x2b, 0x08, 0xef, 0x7f, 0x41, 0x79, 0x78, 0x91,
         0xc1, 0x64, 0x6f, 0x48
     };
-    uint8_t r2[64] = {
+    uint8_t r2[32] = { //msg1, 256 bit (wrong)
+        0x9d, 0x15, 0x1e, 0xef, 0xd8, 0x59, 0x0b, 0x89, 0xda, 0xa6,
+        0xba, 0x6c, 0xb7, 0x4a, 0xf9, 0x27, 0x5d, 0xd0, 0x51, 0x02,
+        0x6b, 0xb1, 0x49, 0xa4, 0x52, 0xfd, 0x84, 0xe5, 0xe5, 0x7b,
+        0x55, 0x00
+    };
+    uint8_t r3[64] = { //msg2, 512 bit
         0x1e, 0x88, 0xe6, 0x22, 0x26, 0xbf, 0xca, 0x6f, 0x99, 0x94,
         0xf1, 0xf2, 0xd5, 0x15, 0x69, 0xe0, 0xda, 0xf8, 0x47, 0x5a,
         0x3b, 0x0f, 0xe6, 0x1a, 0x53, 0x00, 0xee, 0xe4, 0x6d, 0x96,
@@ -84,24 +91,46 @@ int main()
         0xb9, 0xdd, 0xdc, 0x2b, 0x64, 0x60, 0x14, 0x3b, 0x03, 0xda,
         0xba, 0xc9, 0xfb, 0x28
     };
+    uint8_t r4[32] = { //msg2, 256 bit (wrong)
+        0x9d, 0xd2, 0xfe, 0x4e, 0x90, 0x40, 0x9e, 0x5d, 0xa8, 0x7f,
+        0x53, 0x97, 0x6d, 0x74, 0x05, 0xb0, 0xc0, 0xca, 0xc6, 0x28,
+        0xfc, 0x66, 0x9a, 0x74, 0x1d, 0x50, 0x06, 0x3c, 0x55, 0x7e,
+        0x8f, 0x50
+    };
 
     p("plain:") printle(msg1, 63);
-    uint8_t* h1 = hash_generate(msg1, 63);
-    p(" hash:") printle(h1, 64);
-    p(" real:") printle(r1, 64);
+    uint8_t* h1 = _hash_generate(512, msg1, 63);
+    p(" hash 512:") printle(h1, 64);
+    p(" real 512:") printle(r1, 64);
+
+    uint8_t* h2 = _hash_generate(256, msg1, 63);
+    p(" hash 256:") printle(h2, 32);
+    p(" real 256:") printle(r2, 32);
+
+    free(h1); free(h2);
 
     p("\nplain:") printle(msg2, 72);
-    uint8_t* h2 = hash_generate(msg2, 72);
-    p(" hash:") printle(h2, 64);
-    p(" real:") printle(r2, 64);
+    h1 = _hash_generate(512, msg2, 72);
+    p(" hash 512:") printle(h1, 64);
+    p(" real 512:") printle(r3, 64);
+
+    h2 = _hash_generate(256, msg2, 72);
+    p(" hash 256:") printle(h2, 32);
+    p(" real 256:") printle(r4, 32);
+
+    free(h1); free(h2);
 }
 #endif
 
-uint8_t* hash_generate(const uint8_t* data, size_t len)
+static uint8_t* _hash_generate(const int mode, const uint8_t* data, size_t len)
 {
     //1
     uint8_t* h = (uint8_t*)malloc(64);
-    memcpy(h, init_vector, 64);
+    memcpy(
+            h,
+            (mode == 256) ? init_vector_256 : init_vector_512,
+            64
+    );
 
     uint8_t* n = (uint8_t*)calloc(1, 64);
     uint8_t* s = (uint8_t*)calloc(1, 64);
@@ -160,7 +189,13 @@ uint8_t* hash_generate(const uint8_t* data, size_t len)
     free(s);
     free(n);
 
-    return h;
+    if (mode != 256)
+        return h;
+
+    uint8_t* msb = (uint8_t*)malloc(32);
+    memcpy(msb, h+32, 32);
+    free(h);
+    return msb;
 }
 
 //TODO: return new or modify?
