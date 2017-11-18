@@ -34,11 +34,11 @@ $(LIB)$(SLIBNAME): $(TMP)$(OBJECT)
 $(LIB)$(DLIBNAME): $(TMP)$(OBJECT)
 	$(GCC) -shared $(TMP)$(OBJECT) -o $(LIB)$(DLIBNAME)
 
-$(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)$(HEADERS)
+$(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
-debug: $(TMP)$(OBJECT)
-	$(GCC) $(TMP)$(OBJECT) -o debug
+debug: $(LIB)$(DLIBNAME) $(SRC)debug.c
+	$(GCC) $(SRC)debug.c -l$(LIBNAME) -L$(LIB) -Wl,-rpath,$(LIB) -o debug
 
 install: all
 	install --mode=0644 -t $(PREFIXINCLUDE) $(HDR)$(HEADERS)
