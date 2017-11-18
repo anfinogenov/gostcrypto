@@ -1,5 +1,5 @@
 - [ ] GOST R 34.12-2015  
-- [ ] GOST R 34.11-2012  
+- [X] GOST R 34.11-2012  
 - [ ] XTS(CTR) mode
 - [x] archiver  
 - [ ] pbkdf2  
