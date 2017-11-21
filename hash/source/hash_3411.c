@@ -9,11 +9,16 @@
 
 
 //inner variables
-static uint8_t init_vector_256[64] = {0x00};
+static uint8_t init_vector_256[64] = {0x01};
 static uint8_t init_vector_512[64] = {0x00};
+static uint8_t ipad[64] = {0x36};
+static uint8_t opad[64] = {0x5c};
 
 //inner function prototypes
 static uint8_t* _hash_generate(const int mode, const uint8_t* data, size_t len);
+static uint8_t* _hmac_generate(
+        const int mode, const uint8_t* inkey,
+        size_t keylen, const uint8_t* data, size_t len);
 static uint8_t* _xor_block(uint8_t* res, const uint8_t* a, const uint8_t* b);
 static uint8_t* _s_block(uint8_t* res, const uint8_t* a);
 static uint8_t* _p_block(uint8_t* res, const uint8_t* a);
@@ -29,24 +34,33 @@ static uint8_t* _sum_block(uint8_t* res, const uint8_t* a, const uint8_t* b);
 
 //initialization
 __attribute__((constructor))
-static void _set_init_vectors(void)
+static void _fill_init_vectors(void)
 {
-    for (int i = 0; i < 64; i++)
+    for (int i = 1; i < 64; i++)
     {
-        init_vector_256[i] = 0x01;
-        init_vector_512[i] = 0x00;
+        init_vector_256[i] = init_vector_256[0]; //0x01;
+        init_vector_512[i] = init_vector_512[0]; //0x00;
+        ipad[i] = ipad[0]; //0x36;
+        opad[i] = opad[0]; //0x5c;
     }
 }
 
 
 
 //outer functions
-uint8_t* hash_generate_512(const uint8_t* data, size_t len)
-{ return _hash_generate(512, data, len); }
-
 uint8_t* hash_generate_256(const uint8_t* data, size_t len)
 { return _hash_generate(256, data, len); }
 
+uint8_t* hash_generate_512(const uint8_t* data, size_t len)
+{ return _hash_generate(512, data, len); }
+
+uint8_t* hmac_generate_256(
+        const uint8_t* key, size_t keylen, const uint8_t* data, size_t len)
+{ return _hmac_generate(256, key, keylen, data, len); }
+
+uint8_t* hmac_generate_512(
+        const uint8_t* key, size_t keylen, const uint8_t* data, size_t len)
+{ return _hmac_generate(512, key, keylen, data, len); }
 
 
 //inner functions
@@ -118,6 +132,49 @@ static uint8_t* _hash_generate(const int mode, const uint8_t* data, size_t len)
     free(h);
     return msb;
 }
+
+static uint8_t* _hmac_generate(
+        const int mode, const uint8_t* inkey,
+        size_t keylen, const uint8_t* data, size_t len)
+{
+    /*if (keylen < 32 || keylen > 64)
+    {
+        fprintf(stderr, "HMAC: wrong key size (%lld)\n.", keylen);
+        return NULL;
+    }*/
+
+    uint8_t* key = (uint8_t*)calloc(1, 64);
+    //memcpy(key+(64-keylen), inkey, keylen);
+    memcpy(key, inkey, keylen);
+
+    uint8_t key_xor_ipad[64];
+    uint8_t key_xor_opad[64];
+    _xor_block(key_xor_ipad, key, ipad);
+    _xor_block(key_xor_opad, key, opad);
+
+    uint8_t* concat = (uint8_t*)malloc(len+64);
+    //memcpy(concat, data, len);
+    //memcpy(concat+len, key_xor_ipad, 64);
+    memcpy(concat, key_xor_ipad, 64);
+    memcpy(concat+64, data, len);
+
+    size_t hashlen = (mode == 256) ? 32 : 64;
+    uint8_t* hash_ipad = _hash_generate(mode, concat, len+64);
+
+    uint8_t concat2[64+hashlen];
+    //memcpy(concat2, hash_ipad, hashlen);
+    //memcpy(concat2+hashlen, key_xor_opad, 64);
+    memcpy(concat2, key_xor_opad, 64);
+    memcpy(concat2+64, hash_ipad, hashlen);
+
+    free(key);
+    free(concat);
+    free(hash_ipad);
+
+    return _hash_generate(mode, concat2, 64+hashlen);
+}
+
+
 
 static uint8_t* _xor_block(uint8_t* res, const uint8_t* a, const uint8_t* b)
 {
