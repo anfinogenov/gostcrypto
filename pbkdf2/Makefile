@@ -1,4 +1,4 @@
-LIBNAME=hash_3411
+LIBNAME=pbkdf2
 TMP=./tmp/
 LIB=./lib/
 SRC=./source/
