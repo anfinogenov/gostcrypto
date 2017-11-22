@@ -38,7 +38,7 @@ $(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)* $(TMP)
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 debug: $(LIB)$(DLIBNAME) $(SRC)debug.c
-	$(GCC) $(SRC)debug.c -l$(LIBNAME) -L$(LIB) -Wl,-rpath,$(LIB) -o debug
+	$(GCC) $(SRC)debug.c -lhash_3411 -l$(LIBNAME) -L$(LIB) -Wl,-rpath,$(LIB) -o debug
 
 install: all
 	install --mode=0644 -t $(PREFIXINCLUDE) $(HDR)$(HEADERS)
