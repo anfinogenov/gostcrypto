@@ -33,5 +33,6 @@ int main (int argc, char** argv) {
 
     std::cout << "got prime (" << size << " bits): " << num << std::endl;
 
+    free(num);
     return 0;
 }
