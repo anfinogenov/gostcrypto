@@ -1,5 +1,4 @@
-#include <stdint.h>
-
+#include <cstdint>
 #include "kuznyechik.hpp"
 
 const uint8_t gost_pi[256] = 
@@ -24,21 +23,21 @@ const uint8_t gost_pi[256] =
 
 const uint8_t gost_inv_pi[256] = 
 {
-    165, 45, 50, 143, 14, 48, 56, 192, 84, 230, 158, 57, 85, 126, 82, 145, 
-    100, 3, 87, 90, 28, 96, 7, 24, 33, 114, 168, 209, 41, 198, 164, 63, 
-    224, 39, 141, 12, 130, 234, 174, 180, 154, 99, 73, 229, 66, 228, 21, 183, 
-    200, 6, 112, 157, 65, 117, 25, 201, 170, 252, 77, 191, 42, 115, 132, 213, 
-    195, 175, 43, 134, 167, 177, 178, 91, 70, 211, 159, 253, 212, 15, 156, 47, 
-    155, 67, 239, 217, 121, 182, 83, 127, 193, 240, 35, 231, 37, 94, 181, 30, 
-    162, 223, 166, 254, 172, 34, 249, 226, 74, 188, 53, 202, 238, 120, 5, 107, 
-    81, 225, 89, 163, 242, 113, 86, 17, 106, 137, 148, 101, 140, 187, 119, 60, 
-    123, 40, 171, 210, 49, 222, 196, 95, 204, 207, 118, 44, 184, 216, 46, 54, 
-    219, 105, 179, 20, 149, 190, 98, 161, 59, 22, 102, 233, 92, 108, 109, 173, 
-    55, 97, 75, 185, 227, 186, 241, 160, 133, 131, 218, 71, 197, 176, 51, 250, 
-    150, 111, 110, 194, 246, 80, 255, 93, 169, 142, 23, 27, 151, 125, 236, 88, 
-    247, 31, 251, 124, 9, 13, 122, 103, 69, 135, 220, 232, 79, 29, 78, 4, 
-    235, 248, 243, 62, 61, 189, 138, 136, 221, 205, 11, 19, 152, 2, 147, 128, 
-    144, 208, 36, 52, 203, 237, 244, 206, 153, 16, 68, 64, 146, 58, 1, 38, 
+    165, 45, 50, 143, 14, 48, 56, 192, 84, 230, 158, 57, 85, 126, 82, 145,
+    100, 3, 87, 90, 28, 96, 7, 24, 33, 114, 168, 209, 41, 198, 164, 63,
+    224, 39, 141, 12, 130, 234, 174, 180, 154, 99, 73, 229, 66, 228, 21, 183,
+    200, 6, 112, 157, 65, 117, 25, 201, 170, 252, 77, 191, 42, 115, 132, 213,
+    195, 175, 43, 134, 167, 177, 178, 91, 70, 211, 159, 253, 212, 15, 156, 47,
+    155, 67, 239, 217, 121, 182, 83, 127, 193, 240, 35, 231, 37, 94, 181, 30,
+    162, 223, 166, 254, 172, 34, 249, 226, 74, 188, 53, 202, 238, 120, 5, 107,
+    81, 225, 89, 163, 242, 113, 86, 17, 106, 137, 148, 101, 140, 187, 119, 60,
+    123, 40, 171, 210, 49, 222, 196, 95, 204, 207, 118, 44, 184, 216, 46, 54,
+    219, 105, 179, 20, 149, 190, 98, 161, 59, 22, 102, 233, 92, 108, 109, 173,
+    55, 97, 75, 185, 227, 186, 241, 160, 133, 131, 218, 71, 197, 176, 51, 250,
+    150, 111, 110, 194, 246, 80, 255, 93, 169, 142, 23, 27, 151, 125, 236, 88,
+    247, 31, 251, 124, 9, 13, 122, 103, 69, 135, 220, 232, 79, 29, 78, 4,
+    235, 248, 243, 62, 61, 189, 138, 136, 221, 205, 11, 19, 152, 2, 147, 128,
+    144, 208, 36, 52, 203, 237, 244, 206, 153, 16, 68, 64, 146, 58, 1, 38,
     18, 26, 72, 104, 245, 129, 139, 199, 214, 32, 10, 8, 0, 76, 215, 116
 };
 
@@ -47,20 +46,22 @@ const uint8_t gost_lvec[16] =
     0x94, 0x20, 0x85, 0x10, 0xc2, 0xc0, 0x1, 0xfb, 0x1, 0xc0, 0xc2, 0x10, 0x85, 0x20, 0x94
 };
 
+static std::vector<std::vector<uint8_t>> k(10);
+
 // https://github.com/mjosaarinen/kuznechik/blob/master/kuznechik_8bit.c
 static uint8_t kuz_mul_gf256 (uint8_t x, uint8_t y)
 {
-	uint8_t z;
-	
-	z = 0;
-	while (y) {		
-		if (y & 1)
-			z ^= x;
-		x = (x << 1) ^ (x & 0x80 ? 0xC3 : 0x00);
-		y >>= 1;
-	}
-	
-	return z;
+    uint8_t z;
+
+    z = 0;
+    while (y) {
+        if (y & 1)
+            z ^= x;
+        x = (x << 1) ^ (x & 0x80 ? 0xC3 : 0x00);
+        y >>= 1;
+    }
+
+    return z;
 }
 
 void do_x (const std::vector<uint8_t> & iv, const std::vector<uint8_t> & ki, std::vector<uint8_t> & ov) 
@@ -89,15 +90,13 @@ void do_inv_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 
 void do_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
 {
-    for (int i = 0; i < 16; i++) ov.at(i) = iv.at(i); 
-
+    std::copy(iv.begin(), iv.end(), ov.begin());
     for (int round = 0; round < 16; round++) do_r(ov, ov);
 }
 
 void do_inv_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
 {
-    for (int i = 0; i < 16; i++) ov.at(i) = iv.at(i); 
-
+    std::copy(iv.begin(), iv.end(), ov.begin());
     for (int round = 0; round < 16; round++) do_inv_r(ov, ov);
 }
 
@@ -122,4 +121,63 @@ void do_inv_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
         ov.at(idx+1) = iv.at(idx);
     }
     ov.at(0) = x;
+}
+
+void do_f (uint8_t idx, std::vector<uint8_t> & a1, std::vector<uint8_t> & a0)
+{
+    std::vector<uint8_t> temp(16);
+    std::vector<uint8_t> ci(16);
+    ci.at(0) = idx;
+
+    do_l(ci, ci);  // Generate iteration constant (Ci)
+
+    do_x(a1, ci, temp);  // temp = a1^ci
+    do_s(temp, temp);  // temp = s(temp)
+    do_l(temp, temp);  // temp = l(temp)
+    do_x(a0, temp, temp);  // temp ^= temp
+
+    std::copy(a1.begin(), a1.end(), a0.begin());
+    std::copy(temp.begin(), temp.end(), a1.begin());
+}
+
+void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std::vector<uint8_t> & k2) 
+{
+    k1.clear();
+    k2.clear();
+    for (int i = 0; i < 16; i++) 
+    {
+        k1.push_back(key.at(16+i));
+        k2.push_back(key.at(i));
+    }
+}
+
+void kuz_set_key (const uint8_t* key)
+{
+    std::vector<uint8_t> key_vectorized (32);
+    std::copy(key, key+32, key_vectorized.begin());
+
+    std::vector<uint8_t> k1(16), k2(16);
+    split_key(key_vectorized, k1, k2);
+
+    for (int i = 0; i <= 32; i++)
+    {
+        if (i % 8 == 0) { k.at(i >> 2) = k1; k.at((i >> 2) + 1) = k2; }
+        do_f(i+1, k1, k2);
+    }
+}
+
+std::vector<std::vector<uint8_t>>* kuz_export_keys (void)
+{
+    return &k;
+}
+
+void kuz_del_key (void)
+{
+    for (int i = 0; i < 10; i++)
+    {
+        for (auto j = k.at(i).begin(); j != k.at(i).end(); ++j)
+        {
+            *j = (uint8_t)0x00;
+        }
+    }
 }
