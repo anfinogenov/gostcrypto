@@ -181,3 +181,37 @@ void kuz_del_key (void)
         }
     }
 }
+
+void kuz_encrypt_block (uint8_t* data)
+{
+    std::vector<uint8_t> data_vectorized (16);
+    std::copy(data, data+16, data_vectorized.begin());
+
+    for (int i = 0; i < 9; i++)
+    {
+        do_x(data_vectorized, k.at(i), data_vectorized);
+        do_s(data_vectorized, data_vectorized);
+        do_l(data_vectorized, data_vectorized);
+    }
+    do_x(data_vectorized, k.at(9), data_vectorized);
+
+    std::copy(data_vectorized.begin(), data_vectorized.end(), data);
+    data_vectorized.clear();
+}
+
+void kuz_decrypt_block (uint8_t *data)
+{
+    std::vector<uint8_t> data_vectorized (16);
+    std::copy(data, data+16, data_vectorized.begin());
+
+    do_x(data_vectorized, k.at(9), data_vectorized);
+    for (int i = 8; i >= 0; i--)
+    {
+        do_inv_l(data_vectorized, data_vectorized);
+        do_inv_s(data_vectorized, data_vectorized);
+        do_x(data_vectorized, k.at(i), data_vectorized);
+    }
+
+    std::copy(data_vectorized.begin(), data_vectorized.end(), data);
+    data_vectorized.clear();
+}

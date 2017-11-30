@@ -100,6 +100,26 @@ bool key_selftest (void)
     return true;
 }
 
+bool block_selftest (void)
+{
+    kuz_set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
+    
+    std::vector<uint8_t> data = hexstr_to_array("1122334455667700ffeeddccbbaa9988");
+
+    std::vector<uint8_t> gost_plain = hexstr_to_array("1122334455667700ffeeddccbbaa9988");
+    std::vector<uint8_t> gost_enc = hexstr_to_array("7f679d90bebc24305a468d42b9d4edcd");
+
+    kuz_encrypt_block(data.data());
+    if (vector_cmp(data, gost_enc, "encrypt block") == false) return false;
+    
+    kuz_decrypt_block(data.data());
+    if (vector_cmp(data, gost_plain, "decrypt block") == false) return false;
+
+    kuz_del_key();
+    std::cout << "Block encryption\\decryption tested successfully!\n";
+    return true;
+}
+
 int main (void) 
 {
 
@@ -148,6 +168,7 @@ int main (void)
     std::cout << std::endl << tests_done << " primitives tested successfully!\n";
 
     key_selftest();
+    block_selftest();
 
     return 0;
 }

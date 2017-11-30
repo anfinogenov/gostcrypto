@@ -18,3 +18,6 @@ void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std
 void kuz_set_key (const uint8_t* key);
 void kuz_del_key (void);
 std::vector<std::vector<uint8_t>>* kuz_export_keys (void);
+
+void kuz_encrypt_block (uint8_t* data);
+void kuz_decrypt_block (uint8_t* data);
