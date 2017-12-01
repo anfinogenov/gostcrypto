@@ -122,6 +122,7 @@ bool block_selftest (void)
 
 int main (void) 
 {
+    kuz_init();
 
     do_test(do_s, std::vector<const char*> {
         "b66cd8887d38e8d77765aeea0c9a7efc",
@@ -170,5 +171,6 @@ int main (void)
     key_selftest();
     block_selftest();
 
+    kuz_fin();
     return 0;
 }

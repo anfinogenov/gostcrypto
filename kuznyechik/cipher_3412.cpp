@@ -46,7 +46,11 @@ const uint8_t gost_lvec[16] =
     0x94, 0x20, 0x85, 0x10, 0xc2, 0xc0, 0x1, 0xfb, 0x1, 0xc0, 0xc2, 0x10, 0x85, 0x20, 0x94
 };
 
-static std::vector<std::vector<uint8_t>> k(10);
+static std::vector< std::vector<uint8_t> > k(10);
+static uint8_t gf256_mul_table[256][256];
+
+bool is_init = false;
+bool is_key_set = false;
 
 // https://github.com/mjosaarinen/kuznechik/blob/master/kuznechik_8bit.c
 static uint8_t kuz_mul_gf256 (uint8_t x, uint8_t y)
@@ -102,11 +106,11 @@ void do_inv_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 
 void do_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 {
+    if (!is_init) return;
     uint8_t x = iv.at(0);
     for (int idx = 1; idx < 16; idx++)
     {
-        // TODO: change kuz_mul_gz256 to mult table
-        x ^= kuz_mul_gf256(iv.at(idx), gost_lvec[idx-1]);
+        x ^= gf256_mul_table[iv.at(idx)][gost_lvec[idx-1]];
         ov.at(idx-1) = iv.at(idx);
     }
     ov.at(15) = x;
@@ -114,10 +118,11 @@ void do_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 
 void do_inv_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 {
+    if (!is_init) return;
     uint8_t x = iv.at(15);
     for (int idx = 14; idx >= 0; idx--)
     {
-        x ^= kuz_mul_gf256(iv.at(idx), gost_lvec[idx]);
+        x ^= gf256_mul_table[iv.at(idx)][gost_lvec[idx]];
         ov.at(idx+1) = iv.at(idx);
     }
     ov.at(0) = x;
@@ -151,8 +156,35 @@ void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std
     }
 }
 
+int kuz_init (void)
+{
+    if (is_init) return EXIT_FAILURE;
+
+    // Fill multiplication table
+    for (int i = 0; i < 256; i++)
+    {
+        for (int j = 0; j < 256; j++)
+        {
+            gf256_mul_table[i][j] = kuz_mul_gf256(i, j);
+        }
+    }
+
+    is_init = true;
+    return EXIT_SUCCESS;
+}
+
+void kuz_fin (void)
+{
+    if (!is_init) return;
+    if (is_key_set) kuz_del_key();
+
+    is_init = false;
+}
+
 void kuz_set_key (const uint8_t* key)
 {
+    if (is_key_set) return;
+    
     std::vector<uint8_t> key_vectorized (32);
     std::copy(key, key+32, key_vectorized.begin());
 
@@ -164,9 +196,11 @@ void kuz_set_key (const uint8_t* key)
         if (i % 8 == 0) { k.at(i >> 2) = k1; k.at((i >> 2) + 1) = k2; }
         do_f(i+1, k1, k2);
     }
+
+    is_key_set = true;
 }
 
-std::vector<std::vector<uint8_t>>* kuz_export_keys (void)
+std::vector< std::vector<uint8_t> >* kuz_export_keys (void)
 {
     return &k;
 }
@@ -180,10 +214,14 @@ void kuz_del_key (void)
             *j = (uint8_t)0x00;
         }
     }
+
+    is_key_set = false;
 }
 
 void kuz_encrypt_block (uint8_t* data)
 {
+    if (!is_key_set || !is_init) return;
+
     std::vector<uint8_t> data_vectorized (16);
     std::copy(data, data+16, data_vectorized.begin());
 
@@ -201,6 +239,8 @@ void kuz_encrypt_block (uint8_t* data)
 
 void kuz_decrypt_block (uint8_t *data)
 {
+    if (!is_key_set || !is_init) return;
+
     std::vector<uint8_t> data_vectorized (16);
     std::copy(data, data+16, data_vectorized.begin());
 
