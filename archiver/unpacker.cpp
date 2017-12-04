@@ -4,16 +4,16 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#define BLOCKSIZE 1024
+
 void usage (char** argv) 
 {
     std::cerr << "Usage: " << argv[0] << " <archive name>" << std::endl;
 }
 
-// TODO: optimized IO (while !eof read block, 
-//                     parse block and write out parsed data)
 void unpack (std::ifstream & fin) 
 {
-    while (!fin.eof()) 
+    while (fin) 
     {
         char* buf = new char[PATH_MAX];
         fin.getline(buf, PATH_MAX, '\0');
@@ -26,11 +26,21 @@ void unpack (std::ifstream & fin)
         if (S_ISDIR(mode)) mkdir(buf, 0777);
         else {
             std::ofstream fout (buf, std::ios_base::binary | std::ios_base::out);
-            for (int i = 0; i < size; i++) {
-                char tmp;
-                fin.read(&tmp, 1);
-                fout.write(&tmp, 1);
+
+            while (size > BLOCKSIZE) 
+            {
+                char* buf = new char [BLOCKSIZE];
+                fin.read(buf, BLOCKSIZE);
+                fout.write(buf, BLOCKSIZE);
+                size -= BLOCKSIZE;
+                delete[] buf;
             }
+
+            char* buf = new char [size];
+            fin.read(buf, size);
+            fout.write(buf, size);
+            delete[] buf;
+
             fout.close();
         }
     }

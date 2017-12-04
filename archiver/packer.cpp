@@ -9,6 +9,8 @@
 #include <dirent.h>
 #include <unistd.h>
 
+#define BLOCKSIZE 1024
+
 void usage (char** argv) 
 {
     std::cerr << "Usage: " << argv[0] << " [-av] <directory name>" << std::endl;
@@ -21,19 +23,15 @@ void write_file_entry (const char* filename, std::ofstream & fout, const struct 
     fout.write(filename, strlen(filename)+1);                   // direntry name
     fout.write((char*)&(filestat.st_size), sizeof(off_t));      // direntry size (in bytes)
     fout.write((char*)&(filestat.st_mode), sizeof(mode_t));     // direntry mode (dir, file etc.)
-
+    
     do 
     {
-        char* buf = new char[blocksize];                        // create new buffer for optimized IO (now 1 byte wide)
-        if (!fin.read(buf, blocksize))                          // read block from file, associated with entry
-        {
-            delete[] buf;
-            break;                   
-        }
-        fout.write(buf, blocksize);                             // write block to archive
-        delete[] buf;                                           
-    } 
-    while (true);
+        char* buf = new char[blocksize];                        // create new buffer for optimized IO
+        fin.read(buf, blocksize);
+        fout.write(buf, fin.gcount());                          // write block to archive
+        delete[] buf;
+    }
+    while (fin);
 
     fin.close();
 }
@@ -54,15 +52,16 @@ void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool ve
     if (verbose) printf("Found directory: %s\n", dirname);
 
     // get entries from directory
-    while (!(retval = readdir_r(dir, &entry, &entryptr))) {
+    while (!(retval = readdir_r(dir, &entry, &entryptr))) 
+    {
         if (entryptr == nullptr) break;
 
         struct stat entryinfo;
         char* full_name = new char[PATH_MAX];
-        // concat dirname and entryname for lstat() and recursive call of scan_dir() 
+        // concat dirname and entryname for lstat() and recursive call of scan_dir()
         snprintf(full_name, PATH_MAX, "%s/%s", dirname, entry.d_name);
         lstat(full_name, &entryinfo);
-        
+
         // skipping . and .. entries
         if (strncmp(entry.d_name, ".", PATH_MAX) && strncmp(entry.d_name, "..", PATH_MAX)) 
         {
@@ -71,13 +70,13 @@ void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool ve
             {
                 // print info about entry
                 if (verbose) printf("%8lld %s\n", entryinfo.st_size, full_name);
-                write_file_entry(full_name, fout, entryinfo, 1);
+                write_file_entry(full_name, fout, entryinfo, BLOCKSIZE);
                 
                 // if entry is a directory, then recursive call for this directory
                 if (S_ISDIR(entryinfo.st_mode)) 
                     scan_dir(full_name, fout, skip_dot, verbose);
-            }         
-        }       
+            }
+        }
         delete[] full_name;
     }
     closedir(dir);
@@ -122,7 +121,7 @@ int main (int argc, char** argv)
             if (verbose) printf("Found directory: %s\n", argv[i]);
             struct stat entry_dir_stat;
             lstat(argv[i], &entry_dir_stat);
-            write_file_entry(argv[i], fout, entry_dir_stat, 1);
+            write_file_entry(argv[i], fout, entry_dir_stat, BLOCKSIZE);
             scan_dir(argv[i], fout, skip, verbose);
         }
     }
