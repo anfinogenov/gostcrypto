@@ -49,8 +49,8 @@ uninstall:
 	-rm $(PREFIXINCLUDE)$(HEADERS) $(PREFIXLIB)$(SLIBNAME) $(PREFIXLIB)$(DLIBNAME)
 
 $(TMP):
-	mkdir $(TMP)
+	-mkdir $(TMP)
 
 $(LIB):
-	mkdir $(LIB)
+	-mkdir $(LIB)
 
