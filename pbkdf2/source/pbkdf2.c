@@ -82,9 +82,10 @@ static uint8_t* _xor_block(
     return res;
 }
 
+//res != a
 uint8_t* _reverse(uint8_t* res, uint8_t* a, size_t len)
 {
-    for (size_t i = 0; i < (len >> 1); ++i)
+    for (size_t i = 0; i < len; ++i)
         res[i] = a[len-i-1];
     return res;
 }
