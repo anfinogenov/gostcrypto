@@ -1,6 +1,6 @@
 LIBNAME=ctrmode
 TMP=./tmp/
-LIB=./lib/
+LIB=../../lib/
 SRC=./source/
 HDR=./headers/
 HDR2=../headerscommon/
@@ -29,13 +29,16 @@ dynamic: $(LIB)$(DLIBNAME)
 
 #static
 $(LIB)$(SLIBNAME): $(TMP)$(OBJECT)
+	@$(MAKE) $(LIB) > /dev/null 2>&1
 	ar cr $(LIB)$(SLIBNAME) $(TMP)$(OBJECT)
 
 #dynamic
 $(LIB)$(DLIBNAME): $(TMP)$(OBJECT)
+	@$(MAKE) $(LIB) > /dev/null 2>&1
 	gcc -shared $(TMP)$(OBJECT) -o $(LIB)$(DLIBNAME)
 
 $(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)$(HEADERS) $(HDR2)*
+	@$(MAKE) $(TMP) > /dev/null 2>&1
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 
@@ -46,3 +49,10 @@ install: all
 
 uninstall:
 	-rm $(PREFIXINCLUDE)$(HEADERS) $(PREFIXLIB)$(SLIBNAME) $(PREFIXLIB)$(DLIBNAME)
+
+$(LIB):
+	-mkdir $(LIB)
+
+$(TMP):
+	-mkdir $(TMP)
+

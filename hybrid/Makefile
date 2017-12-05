@@ -1,6 +1,6 @@
 LIBNAME=hybrid
 TMP=./tmp/
-LIB=./lib/
+LIB=../lib/
 SRC=./source/
 HDR=./headers/
 
@@ -15,11 +15,7 @@ DLIBNAME=lib$(LIBNAME).so
 
 GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2 -lgmp -lgmpxx
 
-SHAREDLIBS=-lhash_3411 -lpbkdf2 -l$(LIBNAME)
-HASHLIBPATH=../hash/lib/
-KDFLIBPATH=../pbkdf2/lib/
-LDFLAGS=-L$(HASHLIBPATH) -L$(KDFLIBPATH) -L$(LIB) $(SHAREDLIBS) \
--Wl,-rpath,$(HASHLIBPATH) -Wl,-rpath,$(KDFLIBPATH) -Wl,-rpath,$(LIB)
+SHAREDLIBS=-lhash_3411 -lpbkdf2
 
 .PHONY: all clean install uninstall static dynamic
 
@@ -34,18 +30,20 @@ dynamic: $(LIB)$(DLIBNAME)
 
 #static
 $(LIB)$(SLIBNAME): $(TMP)$(OBJECT)
+	@$(MAKE) $(LIB) > /dev/null 2>&1
 	ar cr $(LIB)$(SLIBNAME) $(TMP)$(OBJECT)
 
 #dynamic
 $(LIB)$(DLIBNAME): $(TMP)$(OBJECT)
-	$(GCC) -shared $(TMP)$(OBJECT) -o $(LIB)$(DLIBNAME)
+	@$(MAKE) $(LIB) > /dev/null 2>&1
+	$(GCC) -shared $(TMP)$(OBJECT) -L$(LIB) $(SHAREDLIBS) -o $(LIB)$(DLIBNAME)
 
 $(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*
+	@$(MAKE) $(TMP) > /dev/null 2>&1
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 debug: $(LIB)$(DLIBNAME) $(SRC)debug.cpp
-	$(GCC) -c $(SRC)debug.cpp -o $(TMP)debug.o
-	$(GCC) $(TMP)debug.o $(LDFLAGS) -o debug
+	$(GCC) $(SRC)debug.cpp -L$(LIB) $(SHAREDLIBS) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o debug
 
 install: all
 	install --mode=0644 -t $(PREFIXINCLUDE) $(HDR)$(HEADERS)
@@ -54,4 +52,10 @@ install: all
 
 uninstall:
 	-rm $(PREFIXINCLUDE)$(HEADERS) $(PREFIXLIB)$(SLIBNAME) $(PREFIXLIB)$(DLIBNAME)
+
+$(LIB):
+	-mkdir $(LIB)
+
+$(TMP):
+	-mkdir $(TMP)
 

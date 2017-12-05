@@ -1,6 +1,6 @@
 LIBNAME=pbkdf2
 TMP=./tmp/
-LIB=./lib/
+LIB=../lib/
 SRC=./source/
 HDR=./headers/
 
@@ -27,14 +27,17 @@ static: $(LIB)$(SLIBNAME)
 dynamic: $(LIB)$(DLIBNAME)
 
 #static
-$(LIB)$(SLIBNAME): $(TMP)$(OBJECT) $(LIB)
+$(LIB)$(SLIBNAME): $(TMP)$(OBJECT)
+	@$(MAKE) $(LIB) > /dev/null 2>&1
 	ar cr $(LIB)$(SLIBNAME) $(TMP)$(OBJECT)
 
 #dynamic
-$(LIB)$(DLIBNAME): $(TMP)$(OBJECT) $(LIB)
+$(LIB)$(DLIBNAME): $(TMP)$(OBJECT)
+	@$(MAKE) $(LIB) > /dev/null 2>&1
 	$(GCC) -shared $(TMP)$(OBJECT) -o $(LIB)$(DLIBNAME)
 
-$(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)* $(TMP)
+$(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*
+	@$(MAKE) $(TMP) > /dev/null 2>&1
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 debug: $(LIB)$(DLIBNAME) $(SRC)debug.c
