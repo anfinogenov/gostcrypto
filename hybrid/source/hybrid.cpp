@@ -5,6 +5,9 @@
 #include <gmp.h>
 #include <gmpxx.h>
 
+#include "../../hash/headers/hash_3411.h"
+#include "../../pbkdf2/headers/pbkdf2.h"
+
 //#define LENGTH64
 
 #define DEBUG
@@ -276,30 +279,44 @@ uint8_t* encrypt(uint8_t* data, size_t size, size_t& out_size)
     mpz_class t;
     t = mpz_class_mod(f(alpha, U.y, m)*s + h(alpha, beta, U.y, m), m);
 
-    //TODO: count mac
-    //maybe Y.y as salt?
-    //uint8_t* du = pbkdf2(hmac_generate_256, 32, U.x,?, salt,?, 10000, outlen);
-    //uint8_t* mac = hmac_generate_256(du, dulen, s, slen);
+    //count mac
+    size_t Uxsize = 0;
+    uint8_t* Ux = (uint8_t*)malloc(mpz_class_size(U.x));
+    mpz_export(Ux, &Uxsize, -1, 1, -1, 0, U.x.get_mpz_t());
+
+    size_t Ssize = 0, tempsize = 0;
+    uint8_t* Sar = (uint8_t*)malloc(mpz_class_size(S.x) + mpz_class_size(S.y));
+    mpz_export(Sar, &tempsize, -1, 1, -1, 0, S.x.get_mpz_t());
+    mpz_export(Sar+tempsize, &Ssize, -1, 1, -1, 0, S.y.get_mpz_t());
+    Ssize += tempsize;
+
+    uint8_t* du = pbkdf2(
+            hmac_generate_256, 32,
+            Ux, Uxsize,
+            Sar, Ssize,
+            10000, 32);
+    uint8_t* mac = hmac_generate_256(du, 32, data, size);
 
     uint32_t Msize =
         sizeof(uint32_t) + mpz_class_size(t) +
         sizeof(uint32_t) + mpz_class_size(W.x) +
-        sizeof(uint32_t) + mpz_class_size(W.y);/* +
-        dusize;*/
+        sizeof(uint32_t) + mpz_class_size(W.y) +
+        32; //mac size
     uint8_t* M = (uint8_t*) malloc(Msize);
 
     size_t offset = 0;
     offset += mpz_class_export(M+offset, t);
     offset += mpz_class_export(M+offset, W.x);
     offset += mpz_class_export(M+offset, W.y);
+    memcpy(M+offset, mac, 32);
 
-    if (Msize != offset)
+    if (Msize != offset+32)
     {
         fprintf(stderr, "DEBUG: counted message size != real message size!\n");
-        fprintf(stderr, "M: %d; off: %d\n", Msize, offset);
+        fprintf(stderr, "M: %d; off: %d\n", Msize, offset+32);
     }
 
-    out_size = offset;
+    out_size = offset+32;
     pr("encryption ok");
     return M;
 
@@ -335,11 +352,14 @@ uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
     mpz_class t;
     Point W;
 
+    uint8_t* macenc = (uint8_t*)malloc(32);
+
     size_t offset = 0;
     offset += mpz_class_import(t, data+offset);
     offset += mpz_class_import(W.x, data+offset);
     offset += mpz_class_import(W.y, data+offset);
-    //TODO: du is here
+    memcpy(macenc, data+offset, 32); offset += 32;
+    //du is here
 
     //if not the same curve
     if(!check_point_in_curve(W))
@@ -354,15 +374,38 @@ uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
     mpz_class s;
     s = mpz_class_mod((t - h(alpha, beta, U.y, m))*f_inv(alpha, U.y, m), m);
 
-    //TODO: count mac
-    //maybe Y.y as salt?
-    //uint8_t* du = pbkdf2(hmac_generate_256, 32, U.x,?, salt,?, 10000, outlen);
-    //uint8_t* mac = hmac_generate_256(du, dulen, s, slen);
-
+    //count mac
     uint32_t ssize = mpz_class_size(s);
 
     uint8_t* sar = (uint8_t*)malloc(ssize);
     mpz_export(sar, &out_size, -1, 1, -1, 0, s.get_mpz_t());
+
+    size_t Uxsize = 0;
+    uint8_t* Ux = (uint8_t*)malloc(mpz_class_size(U.x));
+    mpz_export(Ux, &Uxsize, -1, 1, -1, 0, U.x.get_mpz_t());
+
+    size_t Ssize = 0, tempsize = 0;
+    uint8_t* Sar = (uint8_t*)malloc(mpz_class_size(S.x) + mpz_class_size(S.y));
+    mpz_export(Sar, &tempsize, -1, 1, -1, 0, S.x.get_mpz_t());
+    mpz_export(Sar+tempsize, &Ssize, -1, 1, -1, 0, S.y.get_mpz_t());
+    Ssize += tempsize;
+
+    uint8_t* du = pbkdf2(
+            hmac_generate_256, 32,
+            Ux, Uxsize,
+            Sar, Ssize,
+            10000, 32);
+    uint8_t* mac = hmac_generate_256(du, 32, sar, out_size);
+
+    bool mac_ok = true;
+    for (int i = 0; i < 32; i++)
+        if (mac[i] != macenc[i])
+        {
+            std::cerr << "Error: Invalid message hash" << std::endl;
+            mac_ok = false;
+            return NULL;
+        }
+
     return sar;
 }
 
