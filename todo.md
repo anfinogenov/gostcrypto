@@ -1,9 +1,9 @@
-- [ ] GOST R 34.12-2015  
-- [X] GOST R 34.11-2012  
-- [ ] XTS(CTR) mode
+- [x] GOST R 34.12-2015  
+- [x] GOST R 34.11-2012  
+- [ ] XTS(CTR) mode  
 - [x] archiver  
-- [ ] pbkdf2  
-- [ ] hmac
+- [x] pbkdf2  
+- [x] hmac  
 - [ ] multithreading  
 - [ ] compresser  
-- [ ] stegano
+- [ ] stegano  
