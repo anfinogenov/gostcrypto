@@ -1,7 +1,8 @@
-#include <cstdint>
-#include "kuznyechik.hpp"
+#include "cipher_3412.hpp"
 
-const uint8_t gost_pi[256] = 
+namespace GOST3412 {
+
+static const uint8_t gost_pi[256] = 
 {
     252, 238, 221, 17, 207, 110, 49, 22, 251, 196, 250, 218, 35, 197, 4, 77,
     233, 119, 240, 219, 147, 46, 153, 186, 23, 54, 241, 187, 20, 205, 95, 193,
@@ -21,7 +22,7 @@ const uint8_t gost_pi[256] =
     89, 166, 116, 210, 230, 244, 180, 192, 209, 102, 175, 194, 57, 75, 99, 182
 };
 
-const uint8_t gost_inv_pi[256] = 
+static const uint8_t gost_inv_pi[256] = 
 {
     165, 45, 50, 143, 14, 48, 56, 192, 84, 230, 158, 57, 85, 126, 82, 145,
     100, 3, 87, 90, 28, 96, 7, 24, 33, 114, 168, 209, 41, 198, 164, 63,
@@ -41,7 +42,7 @@ const uint8_t gost_inv_pi[256] =
     18, 26, 72, 104, 245, 129, 139, 199, 214, 32, 10, 8, 0, 76, 215, 116
 };
 
-const uint8_t gost_lvec[16] = 
+static const uint8_t gost_lvec[16] = 
 {
     0x94, 0x20, 0x85, 0x10, 0xc2, 0xc0, 0x1, 0xfb, 0x1, 0xc0, 0xc2, 0x10, 0x85, 0x20, 0x94
 };
@@ -49,11 +50,11 @@ const uint8_t gost_lvec[16] =
 static std::vector< std::vector<uint8_t> > k(10);
 static uint8_t gf256_mul_table[256][256];
 
-bool is_init = false;
-bool is_key_set = false;
+static bool is_init = false;
+static bool is_key_set = false;
 
 // https://github.com/mjosaarinen/kuznechik/blob/master/kuznechik_8bit.c
-static uint8_t kuz_mul_gf256 (uint8_t x, uint8_t y)
+static uint8_t mul_gf256 (uint8_t x, uint8_t y)
 {
     uint8_t z;
 
@@ -68,7 +69,7 @@ static uint8_t kuz_mul_gf256 (uint8_t x, uint8_t y)
     return z;
 }
 
-void do_x (const std::vector<uint8_t> & iv, const std::vector<uint8_t> & ki, std::vector<uint8_t> & ov) 
+static void do_x (const std::vector<uint8_t> & iv, const std::vector<uint8_t> & ki, std::vector<uint8_t> & ov) 
 {
     for (int i = 0; i < 16; i++) 
     {
@@ -76,7 +77,7 @@ void do_x (const std::vector<uint8_t> & iv, const std::vector<uint8_t> & ki, std
     }
 }
 
-void do_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
+static void do_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
 {
     for (int i = 0; i < 16; i++) 
     {
@@ -84,7 +85,7 @@ void do_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
     }
 }
 
-void do_inv_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
+static void do_inv_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 {
     for (int i = 0; i < 16; i++)
     {
@@ -92,19 +93,7 @@ void do_inv_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
     }
 }
 
-void do_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
-{
-    std::copy(iv.begin(), iv.end(), ov.begin());
-    for (int round = 0; round < 16; round++) do_r(ov, ov);
-}
-
-void do_inv_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
-{
-    std::copy(iv.begin(), iv.end(), ov.begin());
-    for (int round = 0; round < 16; round++) do_inv_r(ov, ov);
-}
-
-void do_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
+static void do_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 {
     if (!is_init) return;
     uint8_t x = iv.at(0);
@@ -116,7 +105,7 @@ void do_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
     ov.at(15) = x;
 }
 
-void do_inv_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
+static void do_inv_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
 {
     if (!is_init) return;
     uint8_t x = iv.at(15);
@@ -128,7 +117,19 @@ void do_inv_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
     ov.at(0) = x;
 }
 
-void do_f (uint8_t idx, std::vector<uint8_t> & a1, std::vector<uint8_t> & a0)
+static void do_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
+{
+    std::copy(iv.begin(), iv.end(), ov.begin());
+    for (int round = 0; round < 16; round++) do_r(ov, ov);
+}
+
+static void do_inv_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
+{
+    std::copy(iv.begin(), iv.end(), ov.begin());
+    for (int round = 0; round < 16; round++) do_inv_r(ov, ov);
+}
+
+static void do_f (uint8_t idx, std::vector<uint8_t> & a1, std::vector<uint8_t> & a0)
 {
     std::vector<uint8_t> temp(16);
     std::vector<uint8_t> ci(16);
@@ -145,7 +146,7 @@ void do_f (uint8_t idx, std::vector<uint8_t> & a1, std::vector<uint8_t> & a0)
     std::copy(temp.begin(), temp.end(), a1.begin());
 }
 
-void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std::vector<uint8_t> & k2) 
+static void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std::vector<uint8_t> & k2) 
 {
     k1.clear();
     k2.clear();
@@ -156,7 +157,7 @@ void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std
     }
 }
 
-int kuz_init (void)
+int lib_init (void)
 {
     if (is_init) return EXIT_FAILURE;
 
@@ -165,7 +166,7 @@ int kuz_init (void)
     {
         for (int j = 0; j < 256; j++)
         {
-            gf256_mul_table[i][j] = kuz_mul_gf256(i, j);
+            gf256_mul_table[i][j] = mul_gf256(i, j);
         }
     }
 
@@ -173,15 +174,15 @@ int kuz_init (void)
     return EXIT_SUCCESS;
 }
 
-void kuz_fin (void)
+void lib_fin (void)
 {
     if (!is_init) return;
-    if (is_key_set) kuz_del_key();
+    if (is_key_set) GOST3412::del_key();
 
     is_init = false;
 }
 
-void kuz_set_key (const uint8_t* key)
+void set_key (const uint8_t* key)
 {
     if (is_key_set) return;
     
@@ -200,12 +201,7 @@ void kuz_set_key (const uint8_t* key)
     is_key_set = true;
 }
 
-std::vector< std::vector<uint8_t> >* kuz_export_keys (void)
-{
-    return &k;
-}
-
-void kuz_del_key (void)
+void del_key (void)
 {
     for (int i = 0; i < 10; i++)
     {
@@ -218,7 +214,7 @@ void kuz_del_key (void)
     is_key_set = false;
 }
 
-void kuz_encrypt_block (uint8_t* data)
+void encrypt_block (uint8_t* data)
 {
     if (!is_key_set || !is_init) return;
 
@@ -237,7 +233,7 @@ void kuz_encrypt_block (uint8_t* data)
     data_vectorized.clear();
 }
 
-void kuz_decrypt_block (uint8_t *data)
+void decrypt_block (uint8_t *data)
 {
     if (!is_key_set || !is_init) return;
 
@@ -255,3 +251,5 @@ void kuz_decrypt_block (uint8_t *data)
     std::copy(data_vectorized.begin(), data_vectorized.end(), data);
     data_vectorized.clear();
 }
+
+} /* namespace GOST3412 */

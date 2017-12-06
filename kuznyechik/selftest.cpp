@@ -1,5 +1,4 @@
-#include "kuznyechik.hpp"
-#include <cstdlib>
+#include "cipher_3412.cpp"
 #include <iostream>
 #include <iomanip>
 
@@ -53,7 +52,7 @@ bool do_test (void (f)(const std::vector<uint8_t> &, std::vector<uint8_t> &),
               const std::vector<const char*> & strings, const char* init_value, const char* test_name)
 {
     std::vector<uint8_t> self_vec = hexstr_to_array(init_value);
-    std::vector<std::vector<uint8_t>> gost_vec;
+    std::vector< std::vector<uint8_t> > gost_vec;
 
     for (auto it = strings.begin(); it != strings.end(); ++it)
     {
@@ -73,8 +72,8 @@ bool do_test (void (f)(const std::vector<uint8_t> &, std::vector<uint8_t> &),
 
 bool key_selftest (void)
 {
-    kuz_set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
-    auto keys_ptr = kuz_export_keys();
+    GOST3412::set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
+    auto keys_ptr = GOST3412::k;
 
     std::vector<uint8_t> gost_keys[10] = 
     {
@@ -92,74 +91,74 @@ bool key_selftest (void)
 
     for (int i = 0; i < 10; i++)
     {
-        if (vector_cmp(gost_keys[i], keys_ptr->at(i), "Key derivation") == false) return false;
+        if (vector_cmp(gost_keys[i], keys_ptr.at(i), "Key derivation") == false) return false;
     }
 
-    kuz_del_key();
+    GOST3412::del_key();
     std::cout << "Key derivation tested successfully!\n";
     return true;
 }
 
 bool block_selftest (void)
 {
-    kuz_set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
+    GOST3412::set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
     
     std::vector<uint8_t> data = hexstr_to_array("1122334455667700ffeeddccbbaa9988");
 
     std::vector<uint8_t> gost_plain = hexstr_to_array("1122334455667700ffeeddccbbaa9988");
     std::vector<uint8_t> gost_enc = hexstr_to_array("7f679d90bebc24305a468d42b9d4edcd");
 
-    kuz_encrypt_block(data.data());
+    GOST3412::encrypt_block(data.data());
     if (vector_cmp(data, gost_enc, "encrypt block") == false) return false;
     
-    kuz_decrypt_block(data.data());
+    GOST3412::decrypt_block(data.data());
     if (vector_cmp(data, gost_plain, "decrypt block") == false) return false;
 
-    kuz_del_key();
+    GOST3412::del_key();
     std::cout << "Block encryption\\decryption tested successfully!\n";
     return true;
 }
 
 int main (void) 
 {
-    kuz_init();
+    GOST3412::lib_init();
 
-    do_test(do_s, std::vector<const char*> {
+    do_test(GOST3412::do_s, std::vector<const char*> {
         "b66cd8887d38e8d77765aeea0c9a7efc",
         "559d8dd7bd06cbfe7e7b262523280d39",
         "0c3322fed531e4630d80ef5c5a81c50b",
         "23ae65633f842d29c5df529c13f5acda"}, 
         "ffeeddccbbaa99881122334455667700", "S");
 
-    do_test(do_inv_s, std::vector<const char*> {
+    do_test(GOST3412::do_inv_s, std::vector<const char*> {
         "0c3322fed531e4630d80ef5c5a81c50b",
         "559d8dd7bd06cbfe7e7b262523280d39",
         "b66cd8887d38e8d77765aeea0c9a7efc",
         "ffeeddccbbaa99881122334455667700"},
         "23ae65633f842d29c5df529c13f5acda", "S-inv");
 
-    do_test(do_r, std::vector<const char*> {
+    do_test(GOST3412::do_r, std::vector<const char*> {
         "94000000000000000000000000000001",
         "a5940000000000000000000000000000",
         "64a59400000000000000000000000000",
         "0d64a594000000000000000000000000"},
         "00000000000000000000000000000100", "R");
 
-    do_test(do_inv_r, std::vector<const char*> {
+    do_test(GOST3412::do_inv_r, std::vector<const char*> {
         "64a59400000000000000000000000000",
         "a5940000000000000000000000000000",
         "94000000000000000000000000000001",
         "00000000000000000000000000000100"},
         "0d64a594000000000000000000000000", "R-inv");
 
-    do_test(do_l, std::vector<const char*> {
+    do_test(GOST3412::do_l, std::vector<const char*> {
         "d456584dd0e3e84cc3166e4b7fa2890d",
         "79d26221b87b584cd42fbc4ffea5de9a",
         "0e93691a0cfc60408b7b68f66b513c13",
         "e6a8094fee0aa204fd97bcb0b44b8580"},
         "64a59400000000000000000000000000", "L");
 
-    do_test(do_inv_l, std::vector<const char*> {
+    do_test(GOST3412::do_inv_l, std::vector<const char*> {
         "0e93691a0cfc60408b7b68f66b513c13",
         "79d26221b87b584cd42fbc4ffea5de9a",
         "d456584dd0e3e84cc3166e4b7fa2890d",
@@ -171,6 +170,6 @@ int main (void)
     key_selftest();
     block_selftest();
 
-    kuz_fin();
+    GOST3412::lib_fin();
     return 0;
 }
