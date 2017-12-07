@@ -80,6 +80,19 @@ uint8_t* hmac_generate_512(
         const uint8_t* key, size_t keylen, const uint8_t* data, size_t len)
 { return _hmac_generate(512, key, keylen, data, len); }
 
+void hmac_generate_set_key_256(const uint8_t* key, size_t keylen)
+{ _hmac_set_key(256, key, keylen); }
+
+void hmac_generate_set_key_512(const uint8_t* key, size_t keylen)
+{ _hmac_set_key(512, key, keylen); }
+
+uint8_t* hmac_generate_256_append(const uint8_t* data, size_t len, uint8_t is_end)
+{ return _hmac_generate_append(256, data, len, is_end); }
+
+uint8_t* hmac_generate_512_append(const uint8_t* data, size_t len, uint8_t is_end)
+{ return _hmac_generate_append(512, data, len, is_end); }
+
+
 
 //inner functions
 static uint8_t* _hash_generate_append(
