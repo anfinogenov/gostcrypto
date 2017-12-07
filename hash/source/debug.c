@@ -68,22 +68,31 @@ int main()
     printf("hash test:\n");
 
     p("plain:") printle(msg1, 63);
-    uint8_t* h1 = hash_generate_256(msg1, 63);
+    uint8_t* h1 = hash_generate_256_append(msg1, 20, 0);
+    h1 = hash_generate_256_append(msg1+20, 63-20, 1);
     p(" hash 256:") printle(h1, 32);
     p(" real 256:") printle(r2, 32);
+/*
+    uint8_t* h2 = hash_generate_256(msg1, 63);
+    p(" hash 256:") printle(h2, 32);
+    p(" real 256:") printle(r2, 32);*/
 
-    uint8_t* h2 = hash_generate_512(msg1, 63);
+    hash_generate_512_append(msg1, 20, 0);
+    uint8_t* h2 = hash_generate_512_append(msg1+20, 63-20, 1);
     p(" hash 512:") printle(h2, 64);
     p(" real 512:") printle(r1, 64);
 
     free(h1); free(h2);
 
     p("\nplain:") printle(msg2, 72);
-    h1 = hash_generate_256(msg2, 72);
+    hash_generate_256_append(msg2, 66, 0);
+    h1 = hash_generate_256_append(msg2+66, 6, 1);
     p(" hash 256:") printle(h1, 32);
     p(" real 256:") printle(r4, 32);
 
-    h2 = hash_generate_512(msg2, 72);
+    hash_generate_512_append(msg2, 22, 0);
+    hash_generate_512_append(msg2+22, 44, 0);
+    h2 = hash_generate_512_append(msg2+66, 6, 1);
     p(" hash 512:") printle(h2, 64);
     p(" real 512:") printle(r3, 64);
 
@@ -130,6 +139,7 @@ int main()
     p(" real 512:") printle(res512, 64);
 
     free(h1); free(h2);
+
     return 0;
 }
 
