@@ -13,7 +13,7 @@
 
 void usage (char** argv) 
 {
-    std::cerr << "Usage: " << argv[0] << " [-av] <directory name>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " [-avh] <directory name>" << std::endl;
 }
 
 void write_file_entry (const char* filename, std::ofstream & fout, const struct stat filestat, size_t blocksize) 
@@ -23,7 +23,7 @@ void write_file_entry (const char* filename, std::ofstream & fout, const struct 
     fout.write(filename, strlen(filename)+1);                   // direntry name
     fout.write((char*)&(filestat.st_size), sizeof(off_t));      // direntry size (in bytes)
     fout.write((char*)&(filestat.st_mode), sizeof(mode_t));     // direntry mode (dir, file etc.)
-    
+
     do 
     {
         char* buf = new char[blocksize];                        // create new buffer for optimized IO
@@ -42,14 +42,14 @@ void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool ve
     struct dirent entry;
     struct dirent *entryptr = nullptr;
     int retval = 0;
-    
+
     dir = opendir(dirname);
     if (dir == nullptr) 
     {
-        fprintf(stderr, "Error opening directory %s: %s\n", dirname, strerror(errno));
+        std::cerr << "Error opening directory " << dirname << ": " << strerror(errno) << std::endl;
         return;
     }
-    if (verbose) printf("Found directory: %s\n", dirname);
+    if (verbose) std::cout << "Found directory: " <<  dirname << std::endl;
 
     // get entries from directory
     while (!(retval = readdir_r(dir, &entry, &entryptr))) 
@@ -84,8 +84,14 @@ void scan_dir (const char* dirname, std::ofstream & fout, bool skip_dot, bool ve
 
 int main (int argc, char** argv) 
 {
+    if (argc < 2) 
+    {
+        usage(argv);
+        exit(EXIT_FAILURE);
+    }
+
     int opt = 0;
-    char opt_string[] = "av?";
+    char opt_string[] = "avh?";
     bool skip = true, verbose = false;
     opt = getopt(argc, argv, opt_string);
 
@@ -99,6 +105,7 @@ int main (int argc, char** argv)
             verbose = true;
             break;
 
+            case 'h':
             case '?':
             usage(argv);
             exit(EXIT_SUCCESS);
@@ -113,8 +120,26 @@ int main (int argc, char** argv)
         dir = opendir(argv[i]);
         if (dir == nullptr) 
         {
-            fprintf(stderr, "Error opening directory %s: %s\n", argv[i], strerror(errno));
-            return EXIT_FAILURE;
+            if (verbose)
+            {
+                std::cerr << "Error opening directory " << argv[i] << ": " << strerror(errno) << std::endl;
+                std::cerr << "Trying " << argv[i] << " as file...";
+            }
+
+            std::ifstream fin(argv[i], std::ios_base::out | std::ios_base::binary);
+            if (!fin) 
+            {
+                if (verbose) std::cerr << "failed :(\n";
+                continue;
+            }
+            else 
+            {
+                if (verbose) std::cerr << "success!" << std::endl;
+                fin.close();
+                struct stat entry_stat;
+                lstat(argv[i], &entry_stat);
+                write_file_entry(argv[i], fout, entry_stat, BLOCKSIZE);
+            }
         } 
         else 
         {
