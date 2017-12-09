@@ -1,6 +1,7 @@
 #include "cipher_3412.cpp"
 #include <iostream>
 #include <iomanip>
+#include <chrono>
 
 static int tests_done = 0;
 
@@ -119,6 +120,25 @@ bool block_selftest (void)
     return true;
 }
 
+void speed_test(void)
+{
+    GOST3412::set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
+    std::vector<uint8_t> sample_block = hexstr_to_array("aabbccddeeff00112233445566778899");
+
+    auto start = std::chrono::high_resolution_clock::now();
+    int iterations = 4000;
+    for (int i = 0; i < iterations; i++)
+    {
+        GOST3412::encrypt_block(sample_block.data());
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    GOST3412::del_key();
+    std::cout << "Speed test: " <<
+    16.0*iterations/std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()*953.67 << 
+    "MB/sec." << std::endl;
+}
+
 int main (void) 
 {
     GOST3412::lib_init();
@@ -169,6 +189,8 @@ int main (void)
 
     key_selftest();
     block_selftest();
+
+    speed_test();
 
     GOST3412::lib_fin();
     return 0;
