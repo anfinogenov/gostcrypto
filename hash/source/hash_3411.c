@@ -20,6 +20,8 @@ static uint8_t* m = NULL;
 static uint8_t* temp = NULL;
 static uint8_t* datatmp = NULL; //for streamed hash
 static size_t datatmplen = 0;
+static uint8_t* key = NULL;
+static size_t keylen = 0;
 
 //inner function prototypes
 static uint8_t* _hash_generate_append(
@@ -179,11 +181,11 @@ static uint8_t* _hmac_generate(
         size_t inkeylen, const uint8_t* data, size_t len)
 {
     _hmac_set_key(mode, inkey, inkeylen);
+    if (key == NULL)
+        return NULL;
     return _hmac_generate_append(mode, data, len, 1);
 }
 
-static uint8_t* key = NULL;
-static size_t keylen = 0;
 static void _hmac_set_key(const int mode, const uint8_t* inkey, size_t inkeylen)
 {
     if (inkeylen < 8 /*32*/ || inkeylen > 64)

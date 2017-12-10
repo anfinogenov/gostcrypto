@@ -1,4 +1,4 @@
-LIBNAME=hybrid
+LIBNAME=elliptic
 TMP=./tmp/
 LIB=../lib/
 SRC=./source/
