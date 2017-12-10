@@ -9,15 +9,18 @@ GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2
 
 HASH=hash_3411
 KDF=pbkdf2
-HYBRID=hybrid
-CIPHER=kuznyechik
+ELLIPTIC=elliptic
+CIPHER=cipher_3412
 MODE=ctrmode
 
 LIBFILES=$(LIB)lib$(HASH).so $(LIB)lib$(KDF).so \
-$(LIB)lib$(HYBRID).so $(LIB)lib$(MODE).so #$(LIB)lib$(CIPHER).so
+$(LIB)lib$(ELLIPTIC).so $(LIB)lib$(CIPHER).so #$(LIB)lib$(MODE).so
+LIBMAKE=$(MAKE) dynamic
 
-LIBS=-l$(HASH) -l$(KDF) -l$(HYBRID) -l$(MODE) #-l$(CIPHER)
+LIBS=-l$(HASH) -l$(KDF) -l$(ELLIPTIC) -l$(CIPHER) #-l$(MODE)
 LDFLAGS=-L$(LIB) $(LIBS) -Wl,-rpath,$(LIB)
+
+TARGETECHO=@echo -e "\033[00;36mBuilding \033[00;32m$@\033[00m"
 
 .PHONY: all clean install uninstall libs
 
@@ -27,6 +30,7 @@ clean:
 	rm $(TARGET)
 
 $(TARGET): $(SOURCES) libs
+	$(TARGETECHO)
 	$(GCC) $(SOURCES) $(LDFLAGS) -o $(TARGET)
 
 
@@ -34,19 +38,29 @@ $(TARGET): $(SOURCES) libs
 libs: $(LIBFILES)
 
 $(LIB)lib$(HASH).so:
-	cd ./hash && $(MAKE)
+	$(TARGETECHO)
+	@cd ./hash && $(LIBMAKE)
+	@echo
 
 $(LIB)lib$(KDF).so:
-	cd ./pbkdf2 && $(MAKE)
+	$(TARGETECHO)
+	@cd ./pbkdf2 && $(LIBMAKE)
+	@echo
 
-$(LIB)lib$(HYBRID).so:
-	cd ./hybrid && $(MAKE)
+$(LIB)lib$(ELLIPTIC).so:
+	$(TARGETECHO)
+	@cd ./elliptic && $(LIBMAKE)
+	@echo
 
 $(LIB)lib$(CIPHER).so:
-	cd ./kuznyechik && $(MAKE)
+	$(TARGETECHO)
+	@cd ./kuznyechik && $(LIBMAKE)
+	@echo
 
 $(LIB)lib$(MODE).so:
-	cd ./mode/ctr && $(MAKE)
+	$(TARGETECHO)
+	@cd ./mode/ctr && $(LIBMAKE)
+	@echo
 
 
 
