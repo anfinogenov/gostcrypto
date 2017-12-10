@@ -37,27 +37,27 @@ $(TARGET): $(SOURCES) libs
 
 libs: $(LIBFILES)
 
-$(LIB)lib$(HASH).so:
+$(LIB)lib$(HASH).so: ./hash/*
 	$(TARGETECHO)
 	@cd ./hash && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(KDF).so:
+$(LIB)lib$(KDF).so: ./pbkdf2/*
 	$(TARGETECHO)
 	@cd ./pbkdf2 && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(ELLIPTIC).so:
+$(LIB)lib$(ELLIPTIC).so: ./elliptic/*
 	$(TARGETECHO)
 	@cd ./elliptic && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(CIPHER).so:
+$(LIB)lib$(CIPHER).so: ./kuznyechik/
 	$(TARGETECHO)
 	@cd ./kuznyechik && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(MODE).so:
+$(LIB)lib$(MODE).so: ./mode/ctr/*
 	$(TARGETECHO)
 	@cd ./mode/ctr && $(LIBMAKE)
 	@echo
