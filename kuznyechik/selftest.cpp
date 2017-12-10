@@ -28,7 +28,7 @@ void print_vec (std::ostream & s, const std::vector<uint8_t> & a, bool endl)
     endl ? s << std::endl : s << "- ";
 }
 
-bool vector_cmp (std::vector<uint8_t> a, std::vector<uint8_t> b, const char* test_name)
+bool vector_cmp (const std::vector<uint8_t> a, const std::vector<uint8_t> b, const char* test_name)
 {
     auto ai = a.begin();
     auto bi = b.begin();
@@ -49,7 +49,7 @@ bool vector_cmp (std::vector<uint8_t> a, std::vector<uint8_t> b, const char* tes
     return true;
 }
 
-bool do_test (void (f)(const std::vector<uint8_t> &, std::vector<uint8_t> &), 
+bool do_test (void (f)(const uint8_t*, uint8_t*), 
               const std::vector<const char*> & strings, const char* init_value, const char* test_name)
 {
     std::vector<uint8_t> self_vec = hexstr_to_array(init_value);
@@ -62,7 +62,7 @@ bool do_test (void (f)(const std::vector<uint8_t> &, std::vector<uint8_t> &),
 
     for (auto it = gost_vec.begin(); it != gost_vec.end(); ++it)
     {
-        f(self_vec, self_vec);
+        f(self_vec.data(), self_vec.data());
         if (vector_cmp(*it, self_vec, test_name) == false) return false;
     }
 
@@ -74,7 +74,6 @@ bool do_test (void (f)(const std::vector<uint8_t> &, std::vector<uint8_t> &),
 bool key_selftest (void)
 {
     GOST3412::set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
-    auto keys_ptr = GOST3412::k;
 
     std::vector<uint8_t> gost_keys[10] = 
     {
@@ -92,7 +91,9 @@ bool key_selftest (void)
 
     for (int i = 0; i < 10; i++)
     {
-        if (vector_cmp(gost_keys[i], keys_ptr.at(i), "Key derivation") == false) return false;
+        std::vector<uint8_t> key_to_test(16);
+        std::copy(GOST3412::k[i], GOST3412::k[i]+16, key_to_test.begin());
+        if (vector_cmp(key_to_test, gost_keys[i], "Key derivation") == false) continue;
     }
 
     GOST3412::del_key();
@@ -103,7 +104,7 @@ bool key_selftest (void)
 bool block_selftest (void)
 {
     GOST3412::set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
-    
+
     std::vector<uint8_t> data = hexstr_to_array("1122334455667700ffeeddccbbaa9988");
 
     std::vector<uint8_t> gost_plain = hexstr_to_array("1122334455667700ffeeddccbbaa9988");
@@ -123,13 +124,16 @@ bool block_selftest (void)
 void speed_test(void)
 {
     GOST3412::set_key(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
-    std::vector<uint8_t> sample_block = hexstr_to_array("aabbccddeeff00112233445566778899");
+    std::vector<uint8_t> sample_block_vec = hexstr_to_array("aabbccddeeff00112233445566778899");
+    uint8_t sample_block[16];
+    std::copy(sample_block_vec.begin(), sample_block_vec.end(), sample_block);
+    sample_block_vec.clear();
 
     auto start = std::chrono::high_resolution_clock::now();
-    int iterations = 4000;
+    int iterations = 400000;
     for (int i = 0; i < iterations; i++)
     {
-        GOST3412::encrypt_block(sample_block.data());
+        GOST3412::encrypt_block(sample_block);
     }
     auto finish = std::chrono::high_resolution_clock::now();
 
@@ -142,7 +146,7 @@ void speed_test(void)
 int main (void) 
 {
     GOST3412::lib_init();
-
+    
     do_test(GOST3412::do_s, std::vector<const char*> {
         "b66cd8887d38e8d77765aeea0c9a7efc",
         "559d8dd7bd06cbfe7e7b262523280d39",

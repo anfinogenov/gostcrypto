@@ -1,5 +1,8 @@
 #include "cipher_3412.hpp"
 
+#define EXIT_SUCCESS 0
+#define EXIT_FAILURE 1
+
 namespace GOST3412 {
 
 static const uint8_t gost_pi[256] = 
@@ -47,8 +50,8 @@ static const uint8_t gost_lvec[16] =
     0x94, 0x20, 0x85, 0x10, 0xc2, 0xc0, 0x1, 0xfb, 0x1, 0xc0, 0xc2, 0x10, 0x85, 0x20, 0x94
 };
 
-static std::vector< std::vector<uint8_t> > k(10);
-static uint8_t gf256_mul_table[256][256];
+static uint8_t k[10][16];
+static uint8_t gf256_mul_table[256][256];  // TODO: fix memory usage
 
 static bool is_init = false;
 static bool is_key_set = false;
@@ -69,92 +72,87 @@ static uint8_t mul_gf256 (uint8_t x, uint8_t y)
     return z;
 }
 
-static void do_x (const std::vector<uint8_t> & iv, const std::vector<uint8_t> & ki, std::vector<uint8_t> & ov) 
+static void do_x (const uint8_t* iv, const uint8_t* ki, uint8_t* ov) 
 {
     for (int i = 0; i < 16; i++) 
     {
-        ov.at(i) = iv.at(i)^ki.at(i);
+        ov[i] = iv[i]^ki[i];
     }
 }
 
-static void do_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
+static void do_s (const uint8_t* iv, uint8_t* ov) 
 {
     for (int i = 0; i < 16; i++) 
     {
-        ov.at(i) = gost_pi[iv.at(i)];
+       ov[i] = gost_pi[iv[i]];
     }
 }
 
-static void do_inv_s (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
+static void do_inv_s (const uint8_t* iv, uint8_t* ov)
 {
     for (int i = 0; i < 16; i++)
     {
-        ov.at(i) = gost_inv_pi[iv.at(i)];
+        ov[i] = gost_inv_pi[iv[i]];
     }
 }
 
-static void do_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
+static void do_r (const uint8_t* iv, uint8_t* ov)
 {
     if (!is_init) return;
-    uint8_t x = iv.at(0);
+    uint8_t x = iv[0];
     for (int idx = 1; idx < 16; idx++)
     {
-        x ^= gf256_mul_table[iv.at(idx)][gost_lvec[idx-1]];
-        ov.at(idx-1) = iv.at(idx);
+        x ^= gf256_mul_table[iv[idx]][gost_lvec[idx-1]];
+        ov[idx-1] = iv[idx];
     }
-    ov.at(15) = x;
+    ov[15] = x;
 }
 
-static void do_inv_r (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov)
+static void do_inv_r (const uint8_t* iv, uint8_t* ov)
 {
     if (!is_init) return;
-    uint8_t x = iv.at(15);
+    uint8_t x = iv[15];
     for (int idx = 14; idx >= 0; idx--)
     {
-        x ^= gf256_mul_table[iv.at(idx)][gost_lvec[idx]];
-        ov.at(idx+1) = iv.at(idx);
+        x ^= gf256_mul_table[iv[idx]][gost_lvec[idx]];
+        ov[idx+1] = iv[idx];
     }
-    ov.at(0) = x;
+    ov[0] = x;
 }
 
-static void do_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
+static void do_l (const uint8_t* iv, uint8_t* ov) 
 {
-    std::copy(iv.begin(), iv.end(), ov.begin());
+    std::copy(iv, iv+16, ov);
     for (int round = 0; round < 16; round++) do_r(ov, ov);
 }
 
-static void do_inv_l (const std::vector<uint8_t> & iv, std::vector<uint8_t> & ov) 
+static void do_inv_l (const uint8_t* iv, uint8_t* ov) 
 {
-    std::copy(iv.begin(), iv.end(), ov.begin());
+    std::copy(iv, iv+16, ov);
     for (int round = 0; round < 16; round++) do_inv_r(ov, ov);
 }
 
-static void do_f (uint8_t idx, std::vector<uint8_t> & a1, std::vector<uint8_t> & a0)
+static void do_f (uint8_t idx, uint8_t* a1, uint8_t* a0)
 {
-    std::vector<uint8_t> temp(16);
-    std::vector<uint8_t> ci(16);
-    ci.at(0) = idx;
+    uint8_t temp[16] = {0};
+    uint8_t ci[16] = {0};
+    ci[0] = idx;
 
     do_l(ci, ci);  // Generate iteration constant (Ci)
 
     do_x(a1, ci, temp);  // temp = a1^ci
     do_s(temp, temp);  // temp = s(temp)
     do_l(temp, temp);  // temp = l(temp)
-    do_x(a0, temp, temp);  // temp ^= temp
+    do_x(a0, temp, temp);  // temp ^= a0
 
-    std::copy(a1.begin(), a1.end(), a0.begin());
-    std::copy(temp.begin(), temp.end(), a1.begin());
+    std::copy(a1, a1+16, a0);
+    std::copy(temp, temp+16, a1);
 }
 
-static void split_key (const std::vector<uint8_t> & key, std::vector<uint8_t> & k1, std::vector<uint8_t> & k2) 
+static void split_key (const uint8_t* key, uint8_t* k1, uint8_t* k2) 
 {
-    k1.clear();
-    k2.clear();
-    for (int i = 0; i < 16; i++) 
-    {
-        k1.push_back(key.at(16+i));
-        k2.push_back(key.at(i));
-    }
+    std::copy(key+16, key+32, k1);
+    std::copy(key, key+16, k2);
 }
 
 int lib_init (void)
@@ -169,6 +167,8 @@ int lib_init (void)
             gf256_mul_table[i][j] = mul_gf256(i, j);
         }
     }
+
+    GOST3412::del_key();
 
     is_init = true;
     return EXIT_SUCCESS;
@@ -185,16 +185,19 @@ void lib_fin (void)
 void set_key (const uint8_t* key)
 {
     if (is_key_set) return;
-    
-    std::vector<uint8_t> key_vectorized (32);
-    std::copy(key, key+32, key_vectorized.begin());
 
-    std::vector<uint8_t> k1(16), k2(16);
-    split_key(key_vectorized, k1, k2);
+    uint8_t k1[16];
+    uint8_t k2[16];
+
+    split_key(key, k1, k2);
 
     for (int i = 0; i <= 32; i++)
     {
-        if (i % 8 == 0) { k.at(i >> 2) = k1; k.at((i >> 2) + 1) = k2; }
+        if ((i & 7) == 0) 
+        { 
+            std::copy(k1, k1+16, k[i >> 2]);
+            std::copy(k2, k2+16, k[(i >> 2) + 1]);
+        }
         do_f(i+1, k1, k2);
     }
 
@@ -203,11 +206,11 @@ void set_key (const uint8_t* key)
 
 void del_key (void)
 {
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 10; ++i)
     {
-        for (auto j = k.at(i).begin(); j != k.at(i).end(); ++j)
+        for (int j = 0; j < 16; ++j)
         {
-            *j = (uint8_t)0x00;
+            k[i][j] = 0x00;
         }
     }
 
@@ -216,40 +219,28 @@ void del_key (void)
 
 void encrypt_block (uint8_t* data)
 {
-    if (!is_key_set || !is_init) return;
-
-    std::vector<uint8_t> data_vectorized (16);
-    std::copy(data, data+16, data_vectorized.begin());
+    if (!(is_key_set && is_init)) return;
 
     for (int i = 0; i < 9; i++)
     {
-        do_x(data_vectorized, k.at(i), data_vectorized);
-        do_s(data_vectorized, data_vectorized);
-        do_l(data_vectorized, data_vectorized);
+        do_x(data, k[i], data);
+        do_s(data, data);
+        do_l(data, data);
     }
-    do_x(data_vectorized, k.at(9), data_vectorized);
-
-    std::copy(data_vectorized.begin(), data_vectorized.end(), data);
-    data_vectorized.clear();
+    do_x(data, k[9], data);
 }
 
 void decrypt_block (uint8_t *data)
 {
     if (!is_key_set || !is_init) return;
 
-    std::vector<uint8_t> data_vectorized (16);
-    std::copy(data, data+16, data_vectorized.begin());
-
-    do_x(data_vectorized, k.at(9), data_vectorized);
+    do_x(data, k[9], data);
     for (int i = 8; i >= 0; i--)
     {
-        do_inv_l(data_vectorized, data_vectorized);
-        do_inv_s(data_vectorized, data_vectorized);
-        do_x(data_vectorized, k.at(i), data_vectorized);
+        do_inv_l(data, data);
+        do_inv_s(data, data);
+        do_x(data, k[i], data);
     }
-
-    std::copy(data_vectorized.begin(), data_vectorized.end(), data);
-    data_vectorized.clear();
 }
 
 } /* namespace GOST3412 */

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdlib>
+#include <cstdint>
 #include <vector>
 
 namespace GOST3412 {
