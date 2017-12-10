@@ -1,8 +1,8 @@
-LIBNAME=hybrid
+LIBNAME=cipher_3412
 TMP=./tmp/
 LIB=../lib/
-SRC=./source/
-HDR=./headers/
+SRC=./
+HDR=./
 
 PREFIXLIB=/usr/local/lib/
 PREFIXINCLUDE=/usr/local/include/
@@ -13,9 +13,7 @@ OBJECT=$(LIBNAME).o
 SLIBNAME=lib$(LIBNAME).a
 DLIBNAME=lib$(LIBNAME).so
 
-GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2 -lgmp -lgmpxx
-
-SHAREDLIBS=-lhash_3411 -lpbkdf2
+GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2
 
 .PHONY: all clean install uninstall static dynamic
 
@@ -36,14 +34,14 @@ $(LIB)$(SLIBNAME): $(TMP)$(OBJECT)
 #dynamic
 $(LIB)$(DLIBNAME): $(TMP)$(OBJECT)
 	@$(MAKE) $(LIB) > /dev/null 2>&1
-	$(GCC) -shared $(TMP)$(OBJECT) -L$(LIB) $(SHAREDLIBS) -o $(LIB)$(DLIBNAME)
+	$(GCC) -shared $(TMP)$(OBJECT) -L$(LIB) -o $(LIB)$(DLIBNAME)
 
-$(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*
+$(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*.hpp
 	@$(MAKE) $(TMP) > /dev/null 2>&1
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
-debug: $(LIB)$(DLIBNAME) $(SRC)debug.cpp
-	$(GCC) $(SRC)debug.cpp -L$(LIB) $(SHAREDLIBS) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o debug
+selftest: $(LIB)$(DLIBNAME) $(SRC)selftest.cpp
+	$(GCC) $(SRC)selftest.cpp -L$(LIB) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o selftest
 
 install: all
 	install --mode=0644 -t $(PREFIXINCLUDE) $(HDR)$(HEADERS)
