@@ -13,12 +13,15 @@ ELLIPTIC=elliptic
 CIPHER=cipher_3412
 MODE=ctrmode
 
-LIBFILES=$(LIB)lib$(HASH).so $(LIB)lib$(KDF).so \
+#LIBFILES=$(LIB)lib$(HASH).so $(LIB)lib$(KDF).so \
 $(LIB)lib$(ELLIPTIC).so $(LIB)lib$(CIPHER).so #$(LIB)lib$(MODE).so
-LIBMAKE=$(MAKE) dynamic
+LIBMAKE=$(MAKE) static
 
-LIBS=-l$(HASH) -l$(KDF) -l$(ELLIPTIC) -l$(CIPHER) #-l$(MODE)
-LDFLAGS=-L$(LIB) $(LIBS) -Wl,-rpath,$(LIB)
+#LIBS=-l$(HASH) -l$(KDF) -l$(ELLIPTIC) -l$(CIPHER) #-l$(MODE)
+LIBS=$(LIB)lib$(HASH).a $(LIB)lib$(KDF).a $(LIB)lib$(ELLIPTIC).a \
+     $(LIB)lib$(CIPHER).a #$(LIB)lib$(MODE).a
+#LDFLAGS=-L$(LIB) $(LIBS) -Wl,-rpath,$(LIB)
+LDFLAGS=$(LIBS)
 
 TARGETECHO=@echo -e "\033[00;36mBuilding \033[00;32m$@\033[00m"
 
@@ -35,29 +38,29 @@ $(TARGET): $(SOURCES) libs
 
 
 
-libs: $(LIBFILES)
+libs: $(LIBS) #$(LIBFILES)
 
-$(LIB)lib$(HASH).so: ./hash/*
+$(LIB)lib$(HASH).a: ./hash/*
 	$(TARGETECHO)
 	@cd ./hash && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(KDF).so: ./pbkdf2/*
+$(LIB)lib$(KDF).a: ./pbkdf2/*
 	$(TARGETECHO)
 	@cd ./pbkdf2 && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(ELLIPTIC).so: ./elliptic/*
+$(LIB)lib$(ELLIPTIC).a: ./elliptic/*
 	$(TARGETECHO)
 	@cd ./elliptic && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(CIPHER).so: ./kuznyechik/
+$(LIB)lib$(CIPHER).a: ./kuznyechik/
 	$(TARGETECHO)
 	@cd ./kuznyechik && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(MODE).so: ./mode/ctr/*
+$(LIB)lib$(MODE).a: ./mode/ctr/*
 	$(TARGETECHO)
 	@cd ./mode/ctr && $(LIBMAKE)
 	@echo
