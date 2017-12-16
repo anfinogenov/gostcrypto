@@ -8,7 +8,9 @@
 #include <vector>
 #include <iomanip>
 #include <fstream>
+#include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <termios.h>
 #include <stdint.h>
@@ -39,12 +41,11 @@ static const struct option long_opts[] =
     { "verbose", no_argument, NULL, 'v' },
     { "show", no_argument, NULL, 's' },
     { "output", required_argument, NULL, 'o' },
-    { "input", required_argument, NULL, 'i' },
     { "help", no_argument, NULL, 'h'},
     { NULL, no_argument, NULL, 0 }
 };
 
-static const char* opt_string = "edavsi:o:h?";
+static const char* opt_string = "edavs:o:h?";
 
 static unsigned char getch (void)
 {
@@ -96,16 +97,21 @@ static std::string get_password (const char* output, bool show_asterisk=true)
 
 void print_usage (char** argv)
 {
-    std::cout << "Usage: " << argv[0] << std::endl;
+    std::cout << "Usage: " << argv[0] << " [-svedh] [-o <file>] source_file ..." << std::endl;
     std::cout <<
     "-s (--show): Show password symbols as * when typing" << std::endl <<
     "-v (--verbose): Enable verbose output for archiver" << std::endl <<
+    "-e (--encrypt): Create encrypted archive (enabled by default)" << std::endl <<
+    "-d (--decrypt): Unpack and decrypt archive" << std::endl <<
+    "-o (--output) <file>: Write data to file <file>" << std::endl <<
+    "    When not specified, creates archive 'out.eak'" << std::endl <<
+    "-h (--help): Show this help page" << std::endl <<
     "" << std::endl;
 
     exit(EXIT_FAILURE);
 }
 
-void abort (std::string msg)
+void abort (const std::string & msg)
 {
     std::cout << "Abort: " << msg << std::endl;
     exit(EXIT_FAILURE);
@@ -119,11 +125,11 @@ void write_file_entry (const std::string & filename, std::ofstream & fout, const
     fout.write((char*)&(filestat.st_size), sizeof(off_t));      // direntry size (in bytes)
     fout.write((char*)&(filestat.st_mode), sizeof(mode_t));     // direntry mode (dir, file etc.)
 
-    do 
+    do
     {
         char* buf = new char[blocksize];                        // create new buffer for optimized IO
         fin.read(buf, blocksize);
-        for (int i = 0; i < blocksize; i++) buf[i] ^= get_gmm();
+        for (uint32_t i = 0; i < blocksize; i++) buf[i] ^= get_gmm();
         fout.write(buf, fin.gcount());                          // write block to archive
         delete[] buf;
     }
@@ -180,7 +186,7 @@ void scan_dir (const std::string & dirname, std::ofstream & fout, bool skip_dot,
 
 void pack (std::ofstream & fout)
 {
-    for (int i = 0; i < global_args.number_of_input_files; i++)
+    for (uint32_t i = 0; i < global_args.number_of_input_files; i++)
     {
         DIR* dir;
         dir = opendir(global_args.input_files.at(i).c_str());
@@ -188,11 +194,11 @@ void pack (std::ofstream & fout)
         {
             if (global_args.archiver_verbose)
             {
-                std::cerr << "Error opening directory " << global_args.input_files[i] << ": " << strerror(errno) << std::endl;
-                std::cerr << "Trying " << global_args.input_files[i] << " as file...";
+                std::cerr << "Error opening directory " << global_args.input_files.at(i) << ": " << strerror(errno) << std::endl;
+                std::cerr << "Trying " << global_args.input_files.at(i) << " as file...";
             }
 
-            std::ifstream fin(global_args.input_files[i], std::ios_base::out | std::ios_base::binary);
+            std::ifstream fin(global_args.input_files.at(i), std::ios_base::out | std::ios_base::binary);
             if (!fin)
             {
                 if (global_args.archiver_verbose) std::cerr << "failed :(\n";
@@ -204,7 +210,7 @@ void pack (std::ofstream & fout)
                 fin.close();
                 struct stat entry_stat;
                 lstat(global_args.input_files.at(i).c_str(), &entry_stat);
-                write_file_entry(global_args.input_files[i], fout, entry_stat, BLOCKSIZE);
+                write_file_entry(global_args.input_files.at(i), fout, entry_stat, BLOCKSIZE);
             }
         }
         else
@@ -212,8 +218,8 @@ void pack (std::ofstream & fout)
             if (global_args.archiver_verbose) printf("Found directory: %s\n", global_args.input_files.at(i).c_str());
             struct stat entry_dir_stat;
             lstat(global_args.input_files.at(i).c_str(), &entry_dir_stat);
-            write_file_entry(global_args.input_files[i], fout, entry_dir_stat, BLOCKSIZE);
-            scan_dir(global_args.input_files[i], fout, global_args.archiver_skip_dot, global_args.archiver_verbose);
+            write_file_entry(global_args.input_files.at(i), fout, entry_dir_stat, BLOCKSIZE);
+            scan_dir(global_args.input_files.at(i), fout, global_args.archiver_skip_dot, global_args.archiver_verbose);
         }
     }
 }
@@ -235,7 +241,7 @@ void unpack (std::ifstream & fin)
             return;
         }
 
-        std::cout << name_buf << ": " << size << "B, mode: " << std::oct << mode << std::endl;
+        std::cout << name_buf << ": " << std::dec << size << " bytes, mode: " << std::oct << mode << std::endl;
 
         if (S_ISDIR(mode)) mkdir(name_buf, mode); 
         else {
@@ -326,6 +332,29 @@ void print_256bit_BE (uint8_t* vec)
     std::cout << std::endl;
 }
 
+void measure_speed (void)
+{
+    GOST3412::lib_init();
+    uint8_t key[32] = {0};
+    GOST3412::set_key(key);
+    uint8_t sample_block[16] = {0};
+
+    auto start = std::chrono::high_resolution_clock::now();
+    int iterations = 4000;
+    for (int i = 0; i < iterations; i++)
+    {
+        GOST3412::encrypt_block(sample_block);
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    std::cout << "Estimated speed: " <<
+    16.0*iterations/std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()*953.67 << 
+    "MB/sec." << std::endl;
+
+    GOST3412::del_key();
+    GOST3412::lib_fin();
+}
+
 int main (int argc, char** argv)
 {
     if (argc == 1) print_usage(argv);
@@ -344,6 +373,8 @@ int main (int argc, char** argv)
 
     std::string pass = get_password("Enter password: ", global_args.password_asterisks);
     std::cout << std::endl;
+
+    measure_speed();
 
     uint8_t* IV;
     uint8_t* KEY_KUZ;
@@ -386,6 +417,7 @@ int main (int argc, char** argv)
     /* Decrypt */
     else 
     {
+        std::cout << "Archive name: " << global_args.input_files.at(0) << std::endl;
         std::ifstream fin(global_args.input_files.at(0), std::ios_base::binary | std::ios_base::in);
         unpack(fin);
         fin.close();
