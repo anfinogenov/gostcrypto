@@ -11,15 +11,15 @@ HASH=hash_3411
 KDF=pbkdf2
 ELLIPTIC=elliptic
 CIPHER=cipher_3412
-MODE=ctrmode
+MODE=ofbmode
 
 #LIBFILES=$(LIB)lib$(HASH).so $(LIB)lib$(KDF).so \
-$(LIB)lib$(ELLIPTIC).so $(LIB)lib$(CIPHER).so #$(LIB)lib$(MODE).so
+$(LIB)lib$(ELLIPTIC).so $(LIB)lib$(CIPHER).so $(LIB)lib$(MODE).so
 LIBMAKE=$(MAKE) static
 
-#LIBS=-l$(HASH) -l$(KDF) -l$(ELLIPTIC) -l$(CIPHER) #-l$(MODE)
+#LIBS=-l$(HASH) -l$(KDF) -l$(ELLIPTIC) -l$(CIPHER) -l$(MODE)
 LIBS=$(LIB)lib$(HASH).a $(LIB)lib$(KDF).a $(LIB)lib$(ELLIPTIC).a \
-     $(LIB)lib$(CIPHER).a #$(LIB)lib$(MODE).a
+     $(LIB)lib$(CIPHER).a $(LIB)lib$(MODE).a
 #LDFLAGS=-L$(LIB) $(LIBS) -Wl,-rpath,$(LIB)
 LDFLAGS=$(LIBS)
 
@@ -60,9 +60,9 @@ $(LIB)lib$(CIPHER).a: ./kuznyechik/
 	@cd ./kuznyechik && $(LIBMAKE)
 	@echo
 
-$(LIB)lib$(MODE).a: ./mode/ctr/*
+$(LIB)lib$(MODE).a: ./mode/ofb/*
 	$(TARGETECHO)
-	@cd ./mode/ctr && $(LIBMAKE)
+	@cd ./mode/ofb && $(LIBMAKE)
 	@echo
 
 
