@@ -1,9 +1,9 @@
-#ifndef HYBRID_HPP
-#define HYBRID_HPP
+#ifndef ELLIPTIC_HPP
+#define ELLIPTIC_HPP
 
 #include <stdint.h>
 
-namespace hybrid
+namespace elliptic
 {
 
 void set_key(uint8_t* key, size_t size);

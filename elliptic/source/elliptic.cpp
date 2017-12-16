@@ -13,11 +13,14 @@
 #define DEBUG
 #ifdef DEBUG
 #include <iostream>
-#define pr(a) fprintf(stderr, "%s\n", a);
+#define eprint(a) std::cerr << a << std::endl
 #endif
 
-namespace hybrid
+namespace elliptic
 {
+
+//to keep one size everywhere, in import and export
+typedef uint8_t mpz_size_t;
 
 struct Point
 {
@@ -34,10 +37,12 @@ struct Point
     Point& operator = (const Point& src);
     Point& operator += (const Point& src);
     Point& operator *= (const mpz_class& times);
-    Point operator + (const Point& src);
-    Point operator * (const mpz_class& times);
+    Point operator + (const Point& src) const;
+    Point operator * (const mpz_class& times) const;
 };
 
+static void get_next_k_and_U(mpz_class& k, Point& U, const mpz_class& old_k, const Point& Y);
+static void get_next_W_and_U(Point& W, Point& U, const Point& old_W, const mpz_class& d);
 static uint8_t* count_mac(const Point& U, const Point& S, const uint8_t* data, size_t size);
 static size_t mpz_class_import(mpz_class& num, const uint8_t* data);
 static size_t mpz_class_export(uint8_t* data, const mpz_class& num);
@@ -53,6 +58,8 @@ static mpz_class f_inv(
 static mpz_class h(
         const mpz_class& alpha, const mpz_class& beta,
         const mpz_class& coord, const mpz_class& m);
+static mpz_class g(const mpz_class& k); //next k_i for encryption
+static Point g(const Point& W); //next W_i for decryption
 
 
 
@@ -132,14 +139,14 @@ Point& Point::operator *= (const mpz_class& times)
     return *this;
 }
 
-Point Point::operator + (const Point& src)
+Point Point::operator + (const Point& src) const
 {
     Point res(*this);
     res += src;
     return res;
 }
 
-Point Point::operator * (const mpz_class& times)
+Point Point::operator * (const mpz_class& times) const
 {
     Point res(*this);
     res *= times;
@@ -162,7 +169,7 @@ static const char* hex_Px =
     "24D19CC64572EE30F396BF6EBBFD7A6C5213B3B3D7057CC825F91093A68CD762FD60611262CD838DC6B60AA7EEE804E28BC849977FAC33B4B530F1B120248A9A";
 static const char* hex_Py =
     "2BB312A43BD2CE6E0D020613C857ACDDCFBF061E91E5F2C3F32447C259F39B2C83AB156D77F1496BF7EB3351E1EE4E43DC1A18B91B24640B6DBB92CB1ADD371E";
-static uint32_t mac_size = 32;
+static size_t ot_block_size = 32;
 #else
 static const char* hex_p =
     "8000000000000000000000000000000000000000000000000000000000000431";
@@ -178,8 +185,9 @@ static const char* hex_Px =
     "2";
 static const char* hex_Py =
     "8E2A8A0E65147D4BD6316030E16D19C85C97F0A9CA267122B96ABBCEA7E8FC8";
-static uint32_t mac_size = 32;
+static size_t ot_block_size = 16;
 #endif
+static uint32_t mac_size = 32;
 
 //curve parameters
 static mpz_class p;
@@ -195,7 +203,7 @@ static uint8_t key_set = 0;
 static uint8_t* dar = NULL;
 static size_t darsize = 0;
 static mpz_class d;
-
+static mpz_class g_const = 32;
 
 
 static void parameters_init(void)
@@ -214,11 +222,7 @@ static void parameters_init(void)
 
     S = P*mpz_class(m*mpz_class_invert(b+967, p)); //some any value.
 
-#ifdef LENGTH64
     size_t mac_mode = 256;
-#else
-    size_t mac_mode = 256;
-#endif
 
     // mac: Z/q X Z/m -> Z/r => r == 2^256 or 2^512
     mpz_ui_pow_ui(r.get_mpz_t(), 2, mac_mode);
@@ -241,21 +245,19 @@ void set_key(uint8_t* key, size_t size)
     memcpy(dar, key, size);
     darsize = size;
     key_set = 1;
-    //pr("key set");
 }
 
-//out format: 4bytes size of t, t, 4bytes size of Wx, Wx, sizeof Wy, Wy, mac(du)
+//out format: look inside
 uint8_t* encrypt(uint8_t* data, size_t size, size_t& out_size)
 {
     //pr("encryption start");
     if (!key_set)
+    {
+        eprint("decrypt: key is not set");
         return NULL;
+    }
 
     parameters_init();
-
-    //import data as num
-    mpz_class s;
-    mpz_import(s.get_mpz_t(), size, -1, 1, -1, 0, data);
 
     //public key
     Point Y = P*d;
@@ -264,120 +266,207 @@ uint8_t* encrypt(uint8_t* data, size_t size, size_t& out_size)
     mpz_class k;
     Point U;
 
-    //to check if U == +-S
-    do
+    //get k_0
     {
-        k = 0;
-        while (k == 0)
-        {
-            size_t qsize = mpz_class_size(q);
-            uint8_t* kar = (uint8_t*)malloc(qsize);
+        size_t qsize = mpz_class_size(q);
+        uint8_t* kar = (uint8_t*)malloc(qsize);
 
-            std::ifstream ur("/dev/urandom");
-            ur.read((char*)kar, qsize);
+        std::ifstream ur("/dev/urandom");
+        ur.read((char*)kar, qsize);
 
-            mpz_import(k.get_mpz_t(), qsize, -1, 1, -1, 0, kar);
-            k = mpz_class_mod(k, q);
-        }
+        mpz_import(k.get_mpz_t(), qsize, -1, 1, -1, 0, kar);
+        k = mpz_class_mod(k, q);
 
-        //U ok
-        U = Y*k; //check if U == +-S, if yes => choose new k
-    } while (U.x == S.x);
-    //U counted normally
+        free(kar);
+    }
 
-    mpz_class alpha = mpz_class_mod((U.y - S.y) * mpz_class_invert(U.x - S.x, p), p);
-    mpz_class beta = mpz_class_mod((S.y*U.x - S.x*U.y) * mpz_class_invert(U.x - S.x, p), p);
-
+    //W = k_0*P
     Point W = P*k;
 
-    //encrypt message
-    mpz_class t;
-    t = mpz_class_mod(f(alpha, U.y, m)*s + h(alpha, beta, U.y, m), m);
+    //get U_1 for mac
+    get_next_k_and_U(k, U, k, Y);
 
     uint8_t* mac = count_mac(U, S, data, size);
     if (mac == NULL)
     {
-        pr("encrypt: mac failed!");
+        eprint("encrypt: mac failed");
         return NULL;
     }
 
-    //concat encrypted message
-    uint32_t Msize =
-        sizeof(uint32_t) + mpz_class_size(t) +
-        sizeof(uint32_t) + mpz_class_size(W.x) +
-        sizeof(uint32_t) + mpz_class_size(W.y) +
+    //prepare message size
+    size_t Msize =
+        sizeof(mpz_size_t) + mpz_class_size(W.x) +
+        sizeof(mpz_size_t) + mpz_class_size(W.y) +
         mac_size; //mac size
 
-    uint8_t* M = (uint8_t*) malloc(Msize);
+    //keep et size and et
+    size_t t_size = sizeof(uint32_t);
+    uint8_t* tar = (uint8_t*)malloc(t_size);
 
-    size_t offset = 0;
-    offset += mpz_class_export(M+offset, t);
+    uint8_t blocks = 0;
+    uint8_t last_size = 0;
+    //encrypt message
+    // [0] - blocks count, [1] - last block size, [2-5] - et size + 4, other - exported classes Wx, Wy, then mac
+    while (size != 0)
+    {
+        size_t itersize = (size > ot_block_size) ? ot_block_size : size;
+
+        //import data as num
+        mpz_class s;
+        mpz_import(s.get_mpz_t(), itersize, -1, 1, -1, 0, data);
+
+        mpz_class alpha = mpz_class_mod((U.y - S.y) * mpz_class_invert(U.x - S.x, p), p);
+        mpz_class beta = mpz_class_mod((S.y*U.x - S.x*U.y) * mpz_class_invert(U.x - S.x, p), p);
+
+        //encrypt message part
+        mpz_class t;
+        t = mpz_class_mod(f(alpha, U.y, m)*s + h(alpha, beta, U.y, m), m);
+
+        //export message part
+        tar = (uint8_t*)realloc(tar, t_size + sizeof(mpz_size_t) + mpz_class_size(t));
+        t_size += mpz_class_export(tar + t_size, t);
+
+        size -= itersize;
+        data += itersize;
+        if (size == 0)
+            last_size = itersize; //remember size of last block to decrypt correctly
+
+        get_next_k_and_U(k, U, k, Y);
+
+        ++blocks;
+    }
+
+    //concat encrypted message
+    *(uint32_t*)tar = (uint32_t)t_size;
+
+    Msize += t_size + 2;
+    uint8_t* M = (uint8_t*)malloc(Msize);
+    *M = blocks;
+    *(M+1) = last_size;
+    memcpy(M+2, tar, t_size);
+    free(tar); tar = NULL;
+
+    size_t offset = t_size+2;
     offset += mpz_class_export(M+offset, W.x);
     offset += mpz_class_export(M+offset, W.y);
     memcpy(M+offset, mac, mac_size);
 
     out_size = offset+mac_size;
-    //pr("encryption ok");
     return M;
 }
 
 uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
 {
-    //pr("decryption start");
+    out_size = 0;
     if (!key_set)
+    {
+        eprint("decrypt: key is not set");
         return NULL;
+    }
 
     parameters_init();
 
     //parse enctypted message
-    mpz_class t;
     Point W;
-
     uint8_t* macenc = (uint8_t*)malloc(mac_size);
 
-    size_t offset = 0;
-    offset += mpz_class_import(t, data+offset);
+    size_t offset = *(uint32_t*)(data+2) + 2; //skip text
     offset += mpz_class_import(W.x, data+offset);
     offset += mpz_class_import(W.y, data+offset);
     memcpy(macenc, data+offset, mac_size); offset += mac_size;
 
     //if not the same curve
     if(!check_point_in_curve(W))
+    {
+        eprint("decrypt: message was encryped on different curve");
         return NULL;
+    }
 
-    //U ok
-    Point U = W*d;
+    Point U;
+    get_next_W_and_U(W, U, W, d);
+    Point U1 = U; //remember U1 for mac
 
-    mpz_class alpha = mpz_class_mod((U.y - S.y) * mpz_class_invert(U.x - S.x, p), p);
-    mpz_class beta = mpz_class_mod((S.y*U.x - S.x*U.y) * mpz_class_invert(U.x - S.x, p), p);
+    //decrypt
+    size_t blocks = *data;
+    size_t last_size = *(data+1);
+    size_t ssize = blocks*ot_block_size;
+    uint8_t* sar = (uint8_t*)malloc(ssize);
+    size_t sar_offset = 0;
 
-    //decrypt_message
-    mpz_class s;
-    s = mpz_class_mod((t - h(alpha, beta, U.y, m))*f_inv(alpha, U.y, m), m);
+    size_t t_size = *(uint32_t*)(data+2);
+    offset = sizeof(uint32_t) + 2;
+    while(offset < t_size+2) //while not decrypted whole et
+    {
+        //U ok
+        mpz_class t;
+        offset += mpz_class_import(t, data+offset);
+
+        mpz_class alpha = mpz_class_mod((U.y - S.y) * mpz_class_invert(U.x - S.x, p), p);
+        mpz_class beta = mpz_class_mod((S.y*U.x - S.x*U.y) * mpz_class_invert(U.x - S.x, p), p);
+
+        //decrypt_message part
+        mpz_class s;
+        s = mpz_class_mod((t - h(alpha, beta, U.y, m))*f_inv(alpha, U.y, m), m);
+
+        size_t temp = 0;
+        mpz_export(sar+sar_offset, &temp, -1, 1, -1, 0, s.get_mpz_t());
+
+        //fill not significant bytes with 0
+        for (size_t i = temp; i < ot_block_size; i++)
+            sar[sar_offset + i] = 0;
+
+        //if last - add size of last, else full block
+        sar_offset += (offset < t_size+2) ? ot_block_size : last_size;
+
+        get_next_W_and_U(W, U, W, d);
+    }
+
+    ssize = sar_offset;
+    out_size = ssize;
 
     //count mac
-    uint32_t ssize = mpz_class_size(s);
-
-    uint8_t* sar = (uint8_t*)malloc(ssize);
-    mpz_export(sar, &out_size, -1, 1, -1, 0, s.get_mpz_t());
-
-    uint8_t* mac = count_mac(U, S, sar, out_size);
+    uint8_t* mac = count_mac(U1, S, sar, ssize);
 
     if (mac == NULL)
     {
-        pr("decrypt: mac failed!");
+        eprint("decrypt: mac failed");
         return NULL;
     }
 
     //check mac
-    for (int i = 0; i < mac_size; i++)
+    for (size_t i = 0; i < mac_size; i++)
         if (mac[i] != macenc[i])
         {
-            //std::cerr << "Error: Invalid message hash" << std::endl;
+            eprint("decrypt: invalid message hash");
             return NULL;
         }
 
     return sar;
+}
+
+static void get_next_k_and_U(mpz_class& k, Point& U, const mpz_class& old_k, const Point& Y)
+{
+    //to check if U == +-S
+    do
+    {
+        k = g(old_k);
+        k = mpz_class_mod(k, q);
+
+        U = Y*k; //check if U == +-S, if yes => choose new k
+    } while (U.x == S.x);
+    //U counted normally
+}
+
+static void get_next_W_and_U(Point& W, Point& U, const Point& old_W, const mpz_class& d)
+{
+    //to check if U == +-S
+    do
+    {
+        W = g(old_W);
+
+        U = W*d; //check if U == +-S, if yes => choose new k
+    } while (U.x == S.x);
+    //U counted normally
 }
 
 static uint8_t* count_mac(const Point& U, const Point& S, const uint8_t* data, size_t size)
@@ -394,44 +483,38 @@ static uint8_t* count_mac(const Point& U, const Point& S, const uint8_t* data, s
     mpz_export(Sar+tempsize, &Ssize, -1, 1, -1, 0, S.y.get_mpz_t());
     Ssize += tempsize;
 
-#ifdef LENGTH64
-    #define HMAC GOST3411::hmac_256
-#else
-    #define HMAC GOST3411::hmac_256
-#endif
     uint8_t* du = pbkdf2(
-            HMAC, mac_size,
+            GOST3411::hmac_256, mac_size,
             Ux, Uxsize,
             Sar, Ssize,
             10000, mac_size);
 
-    return HMAC(du, mac_size, data, size);
-#undef HMAC
+    return GOST3411::hmac_256(du, mac_size, data, size);
 }
 
 
 
-//read: 4 bytes size, then data. returns number of bytes read
+//read: 1 byte size, then data. returns number of bytes read
 static size_t mpz_class_import(mpz_class& num, const uint8_t* data)
 {
-    size_t size = *(uint32_t*)data;
-    mpz_import(num.get_mpz_t(), size, -1, 1, -1, 0, data+4);
-    return size+4;
+    size_t size = *(mpz_size_t*)data;
+    mpz_import(num.get_mpz_t(), size, -1, 1, -1, 0, data+sizeof(mpz_size_t));
+    return size+sizeof(mpz_size_t);
 } //OK
 
-//write: 4 bytes size, then data. returns written bytes count
+//write: 1 byte size, then data. returns written bytes count
 static size_t mpz_class_export(uint8_t* data, const mpz_class& num)
 {
     size_t size = 0;
-    mpz_export(data+4, &size, -1, 1, -1, 0, num.get_mpz_t());
-    *(uint32_t*)data = (uint32_t)size;
-    return size+4;
+    mpz_export(data+sizeof(mpz_size_t), &size, -1, 1, -1, 0, num.get_mpz_t());
+    *(mpz_size_t*)data = (mpz_size_t)size;
+    return size+sizeof(mpz_size_t);
 } //OK
 
 //size of stored number in bytes
 static size_t mpz_class_size(const mpz_class& num)
 {
-    uint32_t size = mpz_sizeinbase(num.get_mpz_t(), 16);
+    size_t size = mpz_sizeinbase(num.get_mpz_t(), 16);
     size = (size>>1) + (size & 1);
     return size;
 } //OK
@@ -481,6 +564,13 @@ static mpz_class h(
     return mpz_class_mod(f_inv(alpha, coord, m) * beta, m);
 }
 
+//next k_i for encryption
+static mpz_class g(const mpz_class& k)
+{ return k + g_const; }
+
+//next W_i for decryption
+static Point g(const Point& W)
+{ return W + (P*g_const); }
 
 
 
@@ -535,4 +625,5 @@ void debug()
 #endif
 
 }
+#undef eprint
 
