@@ -187,7 +187,7 @@ static const char* hex_Py =
     "8E2A8A0E65147D4BD6316030E16D19C85C97F0A9CA267122B96ABBCEA7E8FC8";
 static size_t ot_block_size = 16;
 #endif
-static uint32_t mac_size = 32;
+static uint32_t mac_size = 64;
 
 //curve parameters
 static mpz_class p;
@@ -222,7 +222,7 @@ static void parameters_init(void)
 
     S = P*mpz_class(m*mpz_class_invert(b+967, p)); //some any value.
 
-    size_t mac_mode = 256;
+    size_t mac_mode = 512;
 
     // mac: Z/q X Z/m -> Z/r => r == 2^256 or 2^512
     mpz_ui_pow_ui(r.get_mpz_t(), 2, mac_mode);
@@ -484,12 +484,12 @@ static uint8_t* count_mac(const Point& U, const Point& S, const uint8_t* data, s
     Ssize += tempsize;
 
     uint8_t* du = pbkdf2(
-            GOST3411::hmac_256, mac_size,
+            GOST3411::hmac_512, mac_size,
             Ux, Uxsize,
             Sar, Ssize,
             10000, mac_size);
 
-    return GOST3411::hmac_256(du, mac_size, data, size);
+    return GOST3411::hmac_512(du, mac_size, data, size);
 }
 
 
