@@ -29,7 +29,7 @@ static uint8_t* _hash_generate_append(
 static uint8_t* _hmac_generate(
         const int mode, const uint8_t* inkey,
         size_t keylen, const uint8_t* data, size_t len);
-static void _hmac_set_key(const int mode, const uint8_t* inkey, size_t keylen);
+static uint8_t _hmac_set_key(const int mode, const uint8_t* inkey, size_t keylen);
 static uint8_t* _hmac_generate_append(
         const int mode, const uint8_t* data, size_t len, uint8_t is_end);
 static void _hash_vars_init(const int mode);
@@ -180,18 +180,17 @@ static uint8_t* _hmac_generate(
         const int mode, const uint8_t* inkey,
         size_t inkeylen, const uint8_t* data, size_t len)
 {
-    _hmac_set_key(mode, inkey, inkeylen);
-    if (key == NULL)
+    if (_hmac_set_key(mode, inkey, inkeylen))
         return NULL;
     return _hmac_generate_append(mode, data, len, 1);
 }
 
-static void _hmac_set_key(const int mode, const uint8_t* inkey, size_t inkeylen)
+static uint8_t _hmac_set_key(const int mode, const uint8_t* inkey, size_t inkeylen)
 {
     if (inkeylen < 8 /*32*/ || inkeylen > 64)
     {
-        fprintf(stderr, "HMAC: wrong key size (%lld)\n.", inkeylen);
-        return;
+        fprintf(stderr, "hmac: wrong key size (%lu out of range [%d, %d])\n.", (uint64_t)inkeylen, 8, 64);
+        return 1;
     }
     keylen = inkeylen;
 
@@ -206,6 +205,8 @@ static void _hmac_set_key(const int mode, const uint8_t* inkey, size_t inkeylen)
 
     _hash_generate_append(mode, concat, 64, 0);
     free(concat);
+
+    return 0;
 }
 
 static uint8_t* _hmac_generate_append(
@@ -214,6 +215,7 @@ static uint8_t* _hmac_generate_append(
     size_t hashlen = (mode == 256) ? 32 : 64;
     uint8_t* hash_ipad = _hash_generate_append(mode, data, len, is_end);
 
+    //if !is_end
     if (hash_ipad == NULL)
         return NULL;
 
@@ -244,11 +246,19 @@ static void _hash_vars_init(const int mode)
             h,
             (mode == 256) ? init_vector_256 : init_vector_512,
             64);
-    if (n != NULL) free(n); n = (uint8_t*)calloc(1, 64);
-    if (s != NULL) free(s); s = (uint8_t*)calloc(1, 64);
-    if (m != NULL) free(m); m = (uint8_t*)calloc(1, 64);
-    if (temp != NULL) free(temp); temp = (uint8_t*)malloc(64);
-    if (datatmp != NULL) free(datatmp); datatmp = (uint8_t*)malloc(64);
+
+    if (n != NULL) free(n);
+    if (s != NULL) free(s);
+    if (m != NULL) free(m);
+    if (temp != NULL) free(temp);
+    if (datatmp != NULL) free(datatmp);
+
+    n = (uint8_t*)calloc(1, 64);
+    s = (uint8_t*)calloc(1, 64);
+    m = (uint8_t*)calloc(1, 64);
+    temp = (uint8_t*)malloc(64);
+    datatmp = (uint8_t*)malloc(64);
+
     datatmplen = 0;
 }
 

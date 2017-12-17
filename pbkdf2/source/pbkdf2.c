@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -58,6 +59,11 @@ uint8_t* pbkdf2(
             }
 
             prfout = prf(passwd, passwdlen, data, datalen);
+            if (prfout == NULL)
+            {
+                fprintf(stderr, "pbkdf2: prf failed\n");
+                return NULL;
+            }
 
             //xor prf outputs
             _xor_block(dk+(hlen*i), dk+(hlen*i), prfout, (i == l-1) ? r : hlen);

@@ -6,7 +6,7 @@
 #include "../../hash/headers/hash_3411.h"
 #include "../headers/pbkdf2.h"
 
-#define p(t) printf("%s ", t);
+#define p(t) printf("%s ", t)
 void printle(uint8_t* a, int len)
 {
     printf("0x");
@@ -31,8 +31,12 @@ int main()
 
     p("password:"); printf("%s\n", passwd);//printle(passwd, passwdlen);
     //p("password:"); printle(passwd, passwdlen);
-    p("     key:"); printle(key, 32);
-
-    free(key);
+    if (key == NULL)
+        fprintf(stderr, "failed!\n");
+    else
+    {
+        p("     key:"); printle(key, 32);
+        free(key);
+    }
 }
 

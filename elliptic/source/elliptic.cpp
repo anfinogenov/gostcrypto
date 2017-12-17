@@ -253,7 +253,7 @@ uint8_t* encrypt(uint8_t* data, size_t size, size_t& out_size)
     //pr("encryption start");
     if (!key_set)
     {
-        eprint("decrypt: key is not set");
+        eprint("elliptic: key is not set, encrypt failed");
         return NULL;
     }
 
@@ -360,7 +360,7 @@ uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
     out_size = 0;
     if (!key_set)
     {
-        eprint("decrypt: key is not set");
+        eprint("elliptic: key is not set, decrypt failed");
         return NULL;
     }
 
@@ -378,7 +378,7 @@ uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
     //if not the same curve
     if(!check_point_in_curve(W))
     {
-        eprint("decrypt: message was encryped on different curve");
+        eprint("elliptic: message was encryped on different curve");
         return NULL;
     }
 
@@ -429,7 +429,7 @@ uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
 
     if (mac == NULL)
     {
-        eprint("decrypt: mac failed");
+        eprint("elliptic: decrypted mac failed");
         return NULL;
     }
 
@@ -437,7 +437,7 @@ uint8_t* decrypt(uint8_t* data, size_t size, size_t& out_size)
     for (size_t i = 0; i < mac_size; i++)
         if (mac[i] != macenc[i])
         {
-            eprint("decrypt: invalid message hash");
+            eprint("elliptic: invalid mac");
             return NULL;
         }
 
@@ -489,6 +489,11 @@ static uint8_t* count_mac(const Point& U, const Point& S, const uint8_t* data, s
             Sar, Ssize,
             10000, mac_size);
 
+    if (du == NULL)
+    {
+        eprint("elliptic: key derivation for mac failed");
+        return NULL;
+    }
     return GOST3411::hmac_512(du, mac_size, data, size);
 }
 
