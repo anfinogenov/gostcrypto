@@ -34,7 +34,7 @@ clean:
 
 $(TARGET): $(SOURCES) libs
 	$(TARGETECHO)
-	$(GCC) $(SOURCES) $(LDFLAGS) -o $(TARGET)
+	$(GCC) $(SOURCES) $(LDFLAGS) -o $(TARGET) -lgmp -lgmpxx
 
 
 
