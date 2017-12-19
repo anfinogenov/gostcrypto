@@ -124,25 +124,36 @@ void write_file_entry (const std::string & filename,
 {
     std::ifstream fin(filename, std::ios_base::binary | std::ios_base::in);
 
+    // direntry name
     std::string filename_encrypted;
     for (auto it = filename.begin(); it != filename.end(); it++)
         filename_encrypted += *it ^ get_gmm();
-    filename_encrypted += get_gmm();
+    filename_encrypted += get_gmm(); // encrypted \0 in the end of string
 
     GOST3411::hmac_256_append((uint8_t*)filename.c_str(), filename.length()+1, 0);
-    fout.write(filename_encrypted.c_str(), filename.length()+1);          // direntry name
+    fout.write(filename_encrypted.c_str(), filename.length()+1);          
 
-    GOST3411::hmac_256_append((uint8_t*)&filestat.st_size, sizeof(off_t), 0);
-    char st_size_encrypted[sizeof(off_t)];
-    for (int i = 0; i < sizeof(off_t); i++)
-        st_size_encrypted[i] = ((filestat.st_size >> 8*i) & 0xFF) ^ get_gmm();
-    fout.write(st_size_encrypted, sizeof(off_t));      // direntry size (in bytes)
+    // direntry size (in bytes)
+    char st_size[8];
+    for (int i = 0; i < 8; i++) 
+    {
+        st_size[i] = (filestat.st_size >> 8*i) & 0xFF;
+    }
+    GOST3411::hmac_256_append((uint8_t*)st_size, 8, 0);
+    for (int i = 0; i < 8; i++)
+        st_size[i] ^= get_gmm();
+    fout.write(st_size, 8);      
     
-    GOST3411::hmac_256_append((uint8_t*)&filestat.st_mode, sizeof(mode_t), 0);
-    char st_mode_encrypted[sizeof(mode_t)];
-    for (int i = 0; i < sizeof(mode_t); i++)
-        st_mode_encrypted[i] = ((filestat.st_mode >> 8*i) & 0xFF) ^ get_gmm();
-    fout.write(st_mode_encrypted, sizeof(mode_t));     // direntry mode (dir, file etc.)
+    // direntry mode (dir, file etc.)
+    char st_mode[8];
+    for (int i = 0; i < 8; i++) 
+    {
+        st_mode[i] = (filestat.st_mode >> 8*i) & 0xFF;
+    }
+    GOST3411::hmac_256_append((uint8_t*)st_mode, 8, 0);
+    for (int i = 0; i < 8; i++)
+        st_mode[i] ^= get_gmm();
+    fout.write(st_mode, 8);    
 
     do
     {
@@ -263,18 +274,18 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
         GOST3411::hmac_256_append((uint8_t*)name_buf, i, 0);
 
         //fin.getline(name_buf, PATH_MAX, '\0');
-        off_t size = 0;
-        mode_t mode = 0;
-        fin.read((char*)&size, sizeof(off_t));
-        fin.read((char*)&mode, sizeof(mode_t));
+        uint64_t size = 0;
+        uint64_t mode = 0;
+        fin.read((char*)&size, 8);
+        fin.read((char*)&mode, 8);
         if (!fin.good()) break;
 
-        for (i = 0; i < sizeof(off_t); i++)
+        for (i = 0; i < 8; i++)
         {
             ((uint8_t*)(&size))[i] ^= get_gmm();
         }
 
-        for (i = 0; i < sizeof(mode_t); i++)
+        for (i = 0; i < 8; i++)
         {
             ((uint8_t*)(&mode))[i] ^= get_gmm();
         }
@@ -285,8 +296,8 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
             break;
         }
 
-        GOST3411::hmac_256_append((uint8_t*)&size, sizeof(off_t), 0);
-        GOST3411::hmac_256_append((uint8_t*)&mode, sizeof(mode_t), 0);
+        GOST3411::hmac_256_append((uint8_t*)&size, 8, 0);
+        GOST3411::hmac_256_append((uint8_t*)&mode, 8, 0);
 
         std::cout << name_buf << ": " << std::dec << size << " bytes, mode: " << std::oct << mode << std::endl;
 
@@ -432,7 +443,7 @@ bool check_exists (std::string & name)
 
 int write_header(const size_t & data_size, uint8_t* data, std::ofstream & fout, const size_t & reserved)
 {
-    fout.write((char*)&data_size, sizeof(size_t));
+    fout.write((char*)&data_size, 2);
     fout.write((char*)data, data_size);
     int reserved_pos = fout.tellp();
     fout.seekp(reserved_pos + reserved, fout.beg);
@@ -544,7 +555,7 @@ int main (int argc, char** argv)
         std::ifstream fin(global_args.input_files.at(0), std::ios_base::binary | std::ios_base::in);
 
         size_t header_size_encrypted = 0, header_size = 0;
-        fin.read((char*)&header_size_encrypted, sizeof(size_t));
+        fin.read((char*)&header_size_encrypted, 2);
 
         uint8_t* header_encrypted = new uint8_t[header_size_encrypted];
         fin.read((char*)header_encrypted, header_size_encrypted);
