@@ -36,7 +36,7 @@ struct globalargs_t {
 static const struct option long_opts[] =
 {
     { "encrypt", no_argument, NULL, 'e' },
-    { "decrypt", no_argument, NULL, 'd' },
+    { "decrypt", required_argument, NULL, 'd' },
     { "all", no_argument, NULL, 'a' },
     { "verbose", no_argument, NULL, 'v' },
     { "show", no_argument, NULL, 's' },
@@ -45,7 +45,7 @@ static const struct option long_opts[] =
     { NULL, no_argument, NULL, 0 }
 };
 
-static const char* opt_string = "edavs:o:h?";
+static const char* opt_string = "ed:avso:h?";
 
 static unsigned char getch (void)
 {
@@ -117,19 +117,39 @@ void abort (const std::string & msg)
     exit(EXIT_FAILURE);
 }
 
-void write_file_entry (const std::string & filename, std::ofstream & fout, const struct stat filestat, size_t blocksize) 
+void write_file_entry (const std::string & filename, 
+                       std::ofstream & fout, 
+                       const struct stat filestat, 
+                       size_t blocksize) 
 {
     std::ifstream fin(filename, std::ios_base::binary | std::ios_base::in);
 
-    fout.write(filename.c_str(), filename.length()+1);          // direntry name
-    fout.write((char*)&(filestat.st_size), sizeof(off_t));      // direntry size (in bytes)
-    fout.write((char*)&(filestat.st_mode), sizeof(mode_t));     // direntry mode (dir, file etc.)
+    std::string filename_encrypted;
+    for (auto it = filename.begin(); it != filename.end(); it++)
+        filename_encrypted += *it ^ get_gmm();
+    filename_encrypted += get_gmm();
+
+    GOST3411::hmac_256_append((uint8_t*)filename.c_str(), filename.length()+1, 0);
+    fout.write(filename_encrypted.c_str(), filename.length()+1);          // direntry name
+
+    GOST3411::hmac_256_append((uint8_t*)&filestat.st_size, sizeof(off_t), 0);
+    char st_size_encrypted[sizeof(off_t)];
+    for (int i = 0; i < sizeof(off_t); i++)
+        st_size_encrypted[i] = ((filestat.st_size >> 8*i) & 0xFF) ^ get_gmm();
+    fout.write(st_size_encrypted, sizeof(off_t));      // direntry size (in bytes)
+    
+    GOST3411::hmac_256_append((uint8_t*)&filestat.st_mode, sizeof(mode_t), 0);
+    char st_mode_encrypted[sizeof(mode_t)];
+    for (int i = 0; i < sizeof(mode_t); i++)
+        st_mode_encrypted[i] = ((filestat.st_mode >> 8*i) & 0xFF) ^ get_gmm();
+    fout.write(st_mode_encrypted, sizeof(mode_t));     // direntry mode (dir, file etc.)
 
     do
     {
         char* buf = new char[blocksize];                        // create new buffer for optimized IO
         fin.read(buf, blocksize);
-        for (uint32_t i = 0; i < blocksize; i++) buf[i] ^= get_gmm();
+        GOST3411::hmac_256_append((uint8_t*)buf, fin.gcount(), 0);
+        for (uint32_t i = 0; i < fin.gcount(); i++) buf[i] ^= get_gmm();
         fout.write(buf, fin.gcount());                          // write block to archive
         delete[] buf;
     }
@@ -184,7 +204,7 @@ void scan_dir (const std::string & dirname, std::ofstream & fout, bool skip_dot,
     closedir(dir);
 }
 
-void pack (std::ofstream & fout)
+void pack (std::ofstream & fout, uint8_t* hmac_out)
 {
     for (uint32_t i = 0; i < global_args.number_of_input_files; i++)
     {
@@ -222,24 +242,51 @@ void pack (std::ofstream & fout)
             scan_dir(global_args.input_files.at(i), fout, global_args.archiver_skip_dot, global_args.archiver_verbose);
         }
     }
+    uint8_t* hmac = GOST3411::hmac_256_append((uint8_t*)"", 0, 1);
+    std::copy(hmac, hmac+32, hmac_out);
 }
 
-void unpack (std::ifstream & fin) 
+void unpack (std::ifstream & fin, uint8_t* hmac_out) 
 {
     while (fin) 
     {
         char* name_buf = new char[PATH_MAX];
-        fin.getline(name_buf, PATH_MAX, '\0');
+        int i = 0;
+        char tmp;
+        do
+        {
+            fin.read(&tmp, 1);
+            tmp ^= get_gmm();
+            name_buf[i++] = tmp;
+        } while (tmp != 0 && fin.good());
+        if (!fin.good()) break;
+        GOST3411::hmac_256_append((uint8_t*)name_buf, i, 0);
+
+        //fin.getline(name_buf, PATH_MAX, '\0');
         off_t size = 0;
         mode_t mode = 0;
         fin.read((char*)&size, sizeof(off_t));
         fin.read((char*)&mode, sizeof(mode_t));
+        if (!fin.good()) break;
+
+        for (i = 0; i < sizeof(off_t); i++)
+        {
+            ((uint8_t*)(&size))[i] ^= get_gmm();
+        }
+
+        for (i = 0; i < sizeof(mode_t); i++)
+        {
+            ((uint8_t*)(&mode))[i] ^= get_gmm();
+        }
 
         if (size == 0 && mode == 0) 
         {
             delete[] name_buf;
-            return;
+            break;
         }
+
+        GOST3411::hmac_256_append((uint8_t*)&size, sizeof(off_t), 0);
+        GOST3411::hmac_256_append((uint8_t*)&mode, sizeof(mode_t), 0);
 
         std::cout << name_buf << ": " << std::dec << size << " bytes, mode: " << std::oct << mode << std::endl;
 
@@ -255,6 +302,7 @@ void unpack (std::ifstream & fin)
                 for (int i = 0; i < BLOCKSIZE; i++) read_buf[i] ^= get_gmm();
                 fout.write(read_buf, BLOCKSIZE);
                 size -= BLOCKSIZE;
+                GOST3411::hmac_256_append((uint8_t*)read_buf, BLOCKSIZE, 0);
                 delete[] read_buf;
             }
 
@@ -262,6 +310,7 @@ void unpack (std::ifstream & fin)
             fin.read(read_buf, size);
             for (int i = 0; i < size; i++) read_buf[i] ^= get_gmm();
             fout.write(read_buf, size);
+            GOST3411::hmac_256_append((uint8_t*)read_buf, size, 0);
             delete[] read_buf;
 
             fout.close();
@@ -269,6 +318,8 @@ void unpack (std::ifstream & fin)
 
         delete[] name_buf;
     }
+    uint8_t* hmac = GOST3411::hmac_256_append((uint8_t*)"", 0, 1);
+    std::copy(hmac, hmac+32, hmac_out);
 }
 
 void get_params (int & argc, char** argv)
@@ -284,6 +335,8 @@ void get_params (int & argc, char** argv)
                 break;
             case 'd':
                 global_args.encrypt = false;
+                global_args.number_of_input_files++;
+                global_args.input_files.push_back(std::string(argv[optind-1]));
                 break;
             case 'v':
                 global_args.archiver_verbose = true;
@@ -318,9 +371,20 @@ void generate_256_random (uint8_t* out, std::ifstream & random_source)
 {
     uint8_t* temp_data = new uint8_t[KEY_RNG_SIZE];
     random_source.read((char*)temp_data, KEY_RNG_SIZE);
-    out = GOST3411::hash_256(temp_data, KEY_RNG_SIZE);
+    uint8_t* hash = GOST3411::hash_256(temp_data, KEY_RNG_SIZE);
+    std::copy(hash, hash+32, out);
     for (int i = 0; i < KEY_RNG_SIZE; i++) temp_data[i] = 0x00;
+    for (int i = 0; i < 32; i++) hash[i] = 0x00;
     delete[] temp_data;
+}
+
+void generate_keys (uint8_t* k1, uint8_t* k2, uint8_t* k3)
+{
+    std::ifstream random_source("/dev/urandom", std::ios::binary | std::ios::in);
+    generate_256_random(k1, random_source);
+    generate_256_random(k2, random_source);
+    generate_256_random(k3, random_source);
+    random_source.close();
 }
 
 void print_256bit_BE (uint8_t* vec)
@@ -355,6 +419,32 @@ void measure_speed (void)
     GOST3412::lib_fin();
 }
 
+bool check_exists (std::string & name)
+{
+    std::ifstream fin(name, std::ios_base::in);
+    if (fin.good())
+    {
+        fin.close();
+        return true;
+    }
+    return false;
+}
+
+int write_header(const size_t & data_size, uint8_t* data, std::ofstream & fout, const size_t & reserved)
+{
+    fout.write((char*)&data_size, sizeof(size_t));
+    fout.write((char*)data, data_size);
+    int reserved_pos = fout.tellp();
+    fout.seekp(reserved_pos + reserved, fout.beg);
+    return reserved_pos;
+}
+
+void write_hmac(const size_t & data_size, const int whence, uint8_t* data, std::ofstream & fout)
+{
+    fout.seekp(whence, fout.beg);
+    fout.write((char*)data, data_size);
+}
+
 int main (int argc, char** argv)
 {
     if (argc == 1) print_usage(argv);
@@ -371,67 +461,126 @@ int main (int argc, char** argv)
         abort("No files provided!");
     }
 
-    std::string pass = get_password("Enter password: ", global_args.password_asterisks);
-    std::cout << std::endl;
-
     measure_speed();
 
-    uint8_t* IV;
-    uint8_t* KEY_KUZ;
-    //uint8_t* KEY_HMAC;
+    std::string pass = "";
+    do
+    {
+        pass = get_password("Enter password (8-64): ", global_args.password_asterisks);
+        std::cout << std::endl;
+    }
+    while (pass.length() < 8 || pass.length() >= 64);
 
-    /* Temporary solution for encryption (until signing is not ready) */
-    KEY_KUZ = pbkdf2(GOST3411::hmac_256, 32, (uint8_t*)pass.c_str(), pass.length(), (uint8_t*)"salt", 4, 1000, 32);
-    print_256bit_BE(KEY_KUZ);
-    IV = new uint8_t[32];
-    for (int i = 0; i < 32; i++) IV[i] = i;
-
-    /*
-     * This code generates pseudo-random keys for all parts of scheme,
-     * uncomment when asymmetric part will be ready
-     */
-
-    /*
-    std::ifstream random_source("/dev/urandom", std::ios::binary | std::ios::in);
-    generate_256_random(KEY_KUZ, random_source);
-    print_256bit_BE(KEY_KUZ);
-
-    generate_256_random(IV, random_source);
-    print_256bit_BE(IV);
-
-    generate_256_random(KEY_HMAC, random_source);
-    print_256bit_BE(KEY_HMAC);
-    random_source.close();
-    */
-
-    init_gmm_generator(KEY_KUZ, IV);
+    std::cout << "Calculating elliptic key...\n";
+    uint8_t* elliptic_key = pbkdf2(hmac_generate_512, 64, (uint8_t*)pass.c_str(), pass.length(), (uint8_t*)"salt", 4, 10000, 64);
+    if (elliptic_key == nullptr)
+    {
+        abort("Some error get after password-based key derivation");
+    }
+    elliptic::set_key(elliptic_key, 32);
 
     /* Encrypt */
-    if (global_args.encrypt) {
-        //TODO: ask about file rewrite
+    if (global_args.encrypt == true) {
+
+        if (check_exists(global_args.out_filename))
+        {
+            std::cout << "\x1B[101;97mAttention! File \x1B[44;30m " << global_args.out_filename << 
+                         " \x1B[101;97m exists. Continue?\x1B[0m y/n " << std::endl;
+            char choice = std::cin.get();
+            if (tolower(choice) != 'y')
+            {
+                abort("File exists!");
+            }
+        }
+
+        uint8_t IV[32], KEY_KUZ[32], KEY_HMAC[32];
+        std::cout << "Generating 3 256-bit keys...\n";
+        generate_keys(IV, KEY_KUZ, KEY_HMAC);
+        
+        std::cout << "Encrypting keys to header using password...\n";
+        uint8_t keys_concat[96];
+        for (int i = 0; i < 32; i++)
+        {
+            keys_concat[i] = IV[i];
+            keys_concat[32+i] = KEY_KUZ[i];
+            keys_concat[64+i] = KEY_HMAC[i];
+        }
+
+        size_t header_size = 0;
+        uint8_t* header = elliptic::encrypt(keys_concat, 96, header_size);
+        if (header == nullptr)
+        {
+            abort("Elliptic encryption failed");
+        }
+        std::cout << "Keys encrypted!\n";
+        std::cout << "OFB initialization...\n";
+        init_gmm_generator(KEY_KUZ, IV);
+
+        std::cout << "Opening file " << global_args.out_filename << "...\n";
         std::ofstream fout(global_args.out_filename, std::ios_base::out | std::ios_base::binary);
-        pack(fout);
+
+        size_t hmac_size = 32;
+        int hmac_place = write_header(header_size, header, fout, hmac_size);
+        GOST3411::hmac_set_key_256(KEY_HMAC, 32);
+        uint8_t hmac[32];
+
+        std::cout << "Encrypting...\n";
+        pack(fout, hmac);
+        std::cout << "HMAC: ";
+        print_256bit_BE(hmac);
+
+        std::cout << "Writing HMAC to archive...\n";
+        write_hmac(hmac_size, hmac_place, hmac, fout);
         fout.close();
+
+        std::cout << "Job's done!\n";
     }
 
     /* Decrypt */
     else 
     {
         std::cout << "Archive name: " << global_args.input_files.at(0) << std::endl;
+        std::cout << "Opening " << global_args.input_files.at(0) << "...\n";
         std::ifstream fin(global_args.input_files.at(0), std::ios_base::binary | std::ios_base::in);
-        unpack(fin);
+
+        size_t header_size_encrypted = 0, header_size = 0;
+        fin.read((char*)&header_size_encrypted, sizeof(size_t));
+
+        uint8_t* header_encrypted = new uint8_t[header_size_encrypted];
+        fin.read((char*)header_encrypted, header_size_encrypted);
+        
+        uint8_t* header = elliptic::decrypt(header_encrypted, header_size_encrypted, header_size);
+        if (header == nullptr)
+        {
+            abort("Elliptic decryption failure. Incorrect password?");
+        }
+        if (header_size != 96) abort("Header size failure");
+
+        std::cout << "Setting keys...";
+        init_gmm_generator(header+32, header);
+        GOST3411::hmac_set_key_256(header+64, 32);
+        uint8_t hmac[32], hmac_read[32];
+        fin.read((char*)&hmac_read, 32);
+
+        std::cout << "Keys set! Decryting...\n";
+        unpack(fin, hmac);
+
         fin.close();
+
+        for (int i = 0; i < 32; i++)
+        {
+            if (hmac[i] != hmac_read[i]) 
+            {
+                std::cout << "Expected: ";
+                print_256bit_BE(hmac_read);
+                std::cout << "     Got: ";
+                print_256bit_BE(hmac);
+                abort("HMAC validation failed!");
+            }
+        }
+        std::cout << "HMAC validation success!\nJob's done!\n";
+
     }
-
-    /* Plan:
-     * Create random key and IV for OFB \done
-     * Call archiver with getopt_long flags \done
-     * Archiver should write enrypted data to out-file \done
-     * This time some elliptic and wind(streebog) magic
-     * (??)(??)encrypted_data(??) is output
-     */
-
-    //TODO: encrypt file headers
 
     exit(EXIT_SUCCESS);
 }

@@ -13,7 +13,7 @@ OBJECT=$(LIBNAME).o
 SLIBNAME=lib$(LIBNAME).a
 DLIBNAME=lib$(LIBNAME).so
 
-GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2
+GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2 -march=native
 
 .PHONY: all clean install uninstall static dynamic
 
