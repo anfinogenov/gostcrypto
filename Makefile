@@ -5,7 +5,7 @@ PREFIX=/usr/local/bin/
 
 SOURCES=main.cpp
 
-GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2
+GCC=$(CFLAGS) g++ -std=c++11 -Wall -Wextra -pedantic -O2 -march=native
 
 HASH=hash_3411
 KDF=pbkdf2

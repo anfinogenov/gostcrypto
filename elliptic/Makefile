@@ -13,7 +13,7 @@ OBJECT=$(LIBNAME).o
 SLIBNAME=lib$(LIBNAME).a
 DLIBNAME=lib$(LIBNAME).so
 
-GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2 -lgmp -lgmpxx
+GCC=$(CFLAGS) g++ -std=c++11 -Wall -pedantic -O2 -lgmp -lgmpxx -march=native
 
 SHAREDLIBS=-lhash_3411 -lpbkdf2
 
