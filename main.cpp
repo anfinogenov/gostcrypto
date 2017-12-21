@@ -154,9 +154,10 @@ void write_file_entry (const std::string & filename,
 
     // direntry size (in bytes)
     char st_size[8];
+    uint64_t long_st_size = filestat.st_size;
     for (int i = 0; i < 8; i++) 
     {
-        st_size[i] = (filestat.st_size >> 8*i) & 0xFF;
+        st_size[i] = (long_st_size >> 8*i) & 0xFF;
     }
     GOST3411::hmac_256_append((uint8_t*)st_size, 8, 0);
     for (int i = 0; i < 8; i++)
@@ -165,9 +166,10 @@ void write_file_entry (const std::string & filename,
 
     // direntry mode (dir, file etc.)
     char st_mode[8];
+    uint64_t long_st_mode = filestat.st_mode;
     for (int i = 0; i < 8; i++) 
     {
-        st_mode[i] = (filestat.st_mode >> 8*i) & 0xFF;
+        st_mode[i] = (long_st_mode >> 8*i) & 0xFF;
     }
     GOST3411::hmac_256_append((uint8_t*)st_mode, 8, 0);
     for (int i = 0; i < 8; i++)
@@ -191,9 +193,7 @@ void write_file_entry (const std::string & filename,
 void scan_dir (const std::string & dirname, std::ofstream & fout, bool skip_dot, bool verbose) 
 {
     DIR* dir = nullptr;
-    struct dirent entry;
-    struct dirent *entryptr = nullptr;
-    int retval = 0;
+    struct dirent* entry = nullptr;
 
     dir = opendir(dirname.c_str());
     if (dir == nullptr) 
@@ -204,24 +204,22 @@ void scan_dir (const std::string & dirname, std::ofstream & fout, bool skip_dot,
     if (verbose) std::cout << "Found directory: " <<  dirname << std::endl;
 
     // get entries from directory
-    while (!(retval = readdir_r(dir, &entry, &entryptr))) 
+    while ((entry = readdir(dir)) != nullptr) 
     {
-        if (entryptr == nullptr) break;
-
         struct stat entryinfo;
         char* full_name = new char[PATH_MAX];
         // concat dirname and entryname for lstat() and recursive call of scan_dir()
-        snprintf(full_name, PATH_MAX, "%s/%s", dirname.c_str(), entry.d_name);
+        snprintf(full_name, PATH_MAX, "%s/%s", dirname.c_str(), entry->d_name);
         lstat(full_name, &entryinfo);
 
         // skipping . and .. entries
-        if (strncmp(entry.d_name, ".", PATH_MAX) && strncmp(entry.d_name, "..", PATH_MAX)) 
+        if (strncmp(entry->d_name, ".", PATH_MAX) && strncmp(entry->d_name, "..", PATH_MAX)) 
         {
             // if skip_dot flag set, then skipping entries starts with dot
-            if (skip_dot ? (strncmp(entry.d_name, ".", 1) != 0) : true) 
+            if (skip_dot ? (strncmp(entry->d_name, ".", 1) != 0) : true) 
             {
                 // print info about entry
-                if (verbose) printf("%8lld %s\n", entryinfo.st_size, full_name);
+                if (verbose) printf("%10u %s\n", (uint32_t)entryinfo.st_size, full_name);
                 write_file_entry(full_name, fout, entryinfo, BLOCKSIZE);
                 
                 // if entry is a directory, then recursive call for this directory
@@ -239,8 +237,13 @@ void pack (std::ofstream & fout, uint8_t* hmac_out)
     for (uint32_t i = 0; i < global_args.number_of_input_files; i++)
     {
         DIR* dir;
+
+        // Delete this annoying double slash
+        if (*(global_args.input_files.at(i).rbegin()) == '/') 
+            global_args.input_files.at(i).pop_back();
+
         dir = opendir(global_args.input_files.at(i).c_str());
-        if (dir == nullptr) 
+        if (dir == nullptr)
         {
             if (global_args.archiver_verbose)
             {
@@ -269,6 +272,7 @@ void pack (std::ofstream & fout, uint8_t* hmac_out)
             struct stat entry_dir_stat;
             lstat(global_args.input_files.at(i).c_str(), &entry_dir_stat);
             write_file_entry(global_args.input_files.at(i), fout, entry_dir_stat, BLOCKSIZE);
+            closedir(dir);
             scan_dir(global_args.input_files.at(i), fout, global_args.archiver_skip_dot, global_args.archiver_verbose);
         }
     }
@@ -317,7 +321,8 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
         GOST3411::hmac_256_append((uint8_t*)&size, 8, 0);
         GOST3411::hmac_256_append((uint8_t*)&mode, 8, 0);
 
-        std::cout << name_buf << ": " << std::dec << size << " bytes, mode: " << std::oct << (uint32_t)mode << std::endl;
+        if (!S_ISDIR(mode))
+            std::cout << name_buf << ": " << std::dec << size << " bytes, mode: " << std::oct << (uint32_t)mode << std::endl;
 
         if (S_ISDIR(mode)) mkdir(name_buf, mode); 
         else {
@@ -602,9 +607,8 @@ int main (int argc, char** argv)
         fin.read((char*)&hmac_read, 32);
         std::cout << "done!\n";
 
-        std::cout << "Decryting... ";
+        std::cout << "Decryting...\n";
         unpack(fin, hmac);
-        std::cout << "done!\n";
 
         fin.close();
 

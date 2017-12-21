@@ -80,7 +80,7 @@ static uint8_t* _xor_block(
 {
     uint8_t cpy[len];
     memcpy(cpy, a, len);
-    for (int i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++)
         res[i] = a[i] ^ b[i];
 
     //TODO: use another function

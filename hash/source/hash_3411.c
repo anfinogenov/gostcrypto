@@ -189,7 +189,7 @@ static uint8_t _hmac_set_key(const int mode, const uint8_t* inkey, size_t inkeyl
 {
     if (inkeylen < 8 /*32*/ || inkeylen > 64)
     {
-        fprintf(stderr, "hmac: wrong key size (%lu out of range [%d, %d])\n.", (uint64_t)inkeylen, 8, 64);
+        fprintf(stderr, "hmac: wrong key size (%llu out of range [%d, %d])\n.", (uint64_t)inkeylen, 8, 64);
         return 1;
     }
     keylen = inkeylen;
