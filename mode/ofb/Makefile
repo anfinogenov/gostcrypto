@@ -14,7 +14,7 @@ OBJECT=$(LIBNAME).o
 SLIBNAME=lib$(LIBNAME).a
 DLIBNAME=lib$(LIBNAME).so
 
-GCC=g++ -std=c++11 -Wall -Werror -pedantic -O2
+GCC=g++ -std=c++11 -Wall -Wextra -pedantic -Ofast -march=native
 
 .PHONY: all clean install uninstall static dynamic
 

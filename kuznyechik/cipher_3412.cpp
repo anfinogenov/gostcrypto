@@ -45,13 +45,14 @@ static const uint8_t gost_inv_pi[256] =
     18, 26, 72, 104, 245, 129, 139, 199, 214, 32, 10, 8, 0, 76, 215, 116
 };
 
+static uint8_t sl_table[16][256][16];
+
 static const uint8_t gost_lvec[16] = 
 {
-    0x94, 0x20, 0x85, 0x10, 0xc2, 0xc0, 0x1, 0xfb, 0x1, 0xc0, 0xc2, 0x10, 0x85, 0x20, 0x94
+    0x94, 0x20, 0x85, 0x10, 0xc2, 0xc0, 0x1, 0xfb, 0x1, 0xc0, 0xc2, 0x10, 0x85, 0x20, 0x94, 0x01
 };
 
 static uint8_t k[10][16];
-static uint8_t gf256_mul_table[256][256];  // TODO: fix memory usage
 
 static bool is_init = false;
 static bool is_key_set = false;
@@ -80,56 +81,55 @@ static void do_x (const uint8_t* iv, const uint8_t* ki, uint8_t* ov)
     }
 }
 
-static void do_s (const uint8_t* iv, uint8_t* ov) 
-{
-    for (int i = 0; i < 16; i++) 
-    {
-       ov[i] = gost_pi[iv[i]];
-    }
-}
-
-static void do_inv_s (const uint8_t* iv, uint8_t* ov)
+static void do_inv_s (uint8_t* iv)
 {
     for (int i = 0; i < 16; i++)
     {
-        ov[i] = gost_inv_pi[iv[i]];
+        iv[i] = gost_inv_pi[iv[i]];
     }
 }
 
-static void do_r (const uint8_t* iv, uint8_t* ov)
+static void do_r (uint8_t* iv)
 {
-    if (!is_init) return;
     uint8_t x = iv[0];
     for (int idx = 1; idx < 16; idx++)
     {
-        x ^= gf256_mul_table[iv[idx]][gost_lvec[idx-1]];
-        ov[idx-1] = iv[idx];
+        x ^= mul_gf256(iv[idx], gost_lvec[idx-1]);
+        iv[idx-1] = iv[idx];
     }
-    ov[15] = x;
+    iv[15] = x;
 }
 
-static void do_inv_r (const uint8_t* iv, uint8_t* ov)
+static void do_inv_r (uint8_t* iv)
 {
-    if (!is_init) return;
     uint8_t x = iv[15];
     for (int idx = 14; idx >= 0; idx--)
     {
-        x ^= gf256_mul_table[iv[idx]][gost_lvec[idx]];
-        ov[idx+1] = iv[idx];
+        x ^= mul_gf256(iv[idx], gost_lvec[idx]);
+        iv[idx+1] = iv[idx];
     }
-    ov[0] = x;
+    iv[0] = x;
 }
 
-static void do_l (const uint8_t* iv, uint8_t* ov) 
+static void do_l (uint8_t* iv) 
 {
-    std::copy(iv, iv+16, ov);
-    for (int round = 0; round < 16; round++) do_r(ov, ov);
+    for (int round = 0; round < 16; round++) do_r(iv);
 }
 
-static void do_inv_l (const uint8_t* iv, uint8_t* ov) 
+static void do_inv_l (uint8_t* iv) 
 {
-    std::copy(iv, iv+16, ov);
-    for (int round = 0; round < 16; round++) do_inv_r(ov, ov);
+    for (int round = 0; round < 16; round++) do_inv_r(iv);
+}
+
+static void do_sl (uint8_t* iv)
+{
+    uint8_t temp[16] = {0};
+    for (int i = 0; i < 16; i++) 
+    {
+        for (int j = 0; j < 16; j++)
+            temp[j] ^= sl_table[i][iv[i]][j];
+    }
+    std::copy(temp, temp+16, iv);
 }
 
 static void do_f (uint8_t idx, uint8_t* a1, uint8_t* a0)
@@ -138,12 +138,11 @@ static void do_f (uint8_t idx, uint8_t* a1, uint8_t* a0)
     uint8_t ci[16] = {0};
     ci[0] = idx;
 
-    do_l(ci, ci);  // Generate iteration constant (Ci)
+    do_l(ci);  // Generate iteration constant (Ci)
 
-    do_x(a1, ci, temp);  // temp = a1^ci
-    do_s(temp, temp);  // temp = s(temp)
-    do_l(temp, temp);  // temp = l(temp)
-    do_x(a0, temp, temp);  // temp ^= a0
+    do_x(a1, ci, temp);
+    do_sl(temp);
+    do_x(a0, temp, temp);
 
     std::copy(a1, a1+16, a0);
     std::copy(temp, temp+16, a1);
@@ -159,12 +158,15 @@ int lib_init (void)
 {
     if (is_init) return EXIT_FAILURE;
 
-    // Fill multiplication table
-    for (int i = 0; i < 256; i++)
+    uint8_t temp[16] = {0};
+    for (int i = 0; i < 16; i++)
     {
         for (int j = 0; j < 256; j++)
         {
-            gf256_mul_table[i][j] = mul_gf256(i, j);
+            for (int k = 0; k < 16; k++) temp[k] = 0;
+            temp[i] = gost_pi[j];
+            do_l(temp);
+            for (int k = 0; k < 16; k++) sl_table[i][j][k] = temp[k];
         }
     }
 
@@ -224,8 +226,7 @@ void encrypt_block (uint8_t* data)
     for (int i = 0; i < 9; i++)
     {
         do_x(data, k[i], data);
-        do_s(data, data);
-        do_l(data, data);
+        do_sl(data);
     }
     do_x(data, k[9], data);
 }
@@ -237,8 +238,8 @@ void decrypt_block (uint8_t *data)
     do_x(data, k[9], data);
     for (int i = 8; i >= 0; i--)
     {
-        do_inv_l(data, data);
-        do_inv_s(data, data);
+        do_inv_l(data);
+        do_inv_s(data);
         do_x(data, k[i], data);
     }
 }

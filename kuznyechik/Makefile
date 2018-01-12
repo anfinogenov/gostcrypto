@@ -15,7 +15,7 @@ DLIBNAME=lib$(LIBNAME).so
 
 GCC=$(CFLAGS) g++ -std=c++11 -Wall -Wextra -pedantic -Ofast -march=native
 
-.PHONY: all clean install uninstall static dynamic
+.PHONY: all clean install uninstall static dynamic selftest
 
 all: static dynamic
 
@@ -41,7 +41,8 @@ $(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*.hpp
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 selftest: $(LIB)$(DLIBNAME) $(SRC)selftest.cpp
-	$(GCC) $(SRC)selftest.cpp -L$(LIB) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o selftest
+	$(GCC) $(SRC)selftest.cpp ../mode/ofb/ofbmode.cpp -L$(LIB) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o selftest
+	./selftest
 
 install: all
 	install --mode=0644 -t $(PREFIXINCLUDE) $(HDR)$(HEADERS)
