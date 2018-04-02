@@ -99,12 +99,14 @@ static std::string get_password (const char* output, bool show_asterisk=true)
 
 void print_usage (char** argv)
 {
-    std::cout << "Usage: " << argv[0] << " [-svfh] [-o <file>] [-d <file> | -e <source_file1> ...]" << std::endl;
+    std::cout << "Usage: " << argv[0] << " [-svfh] [-o <file>] " <<
+                 "[-d <file> | -e <source_file1> ...]" << std::endl;
     std::cout <<
     "-f (--force): Do not ask if file exists" << std::endl <<
     "-s (--show): Show password symbols as * when typing" << std::endl <<
     "-v (--verbose): Enable verbose output for archiver" << std::endl <<
-    "-e (--encrypt): Create encrypted archive (enabled by default)" << std::endl <<
+    "-e (--encrypt): Create encrypted archive " <<
+    "(enabled by default)" << std::endl <<
     "-d (--decrypt): Unpack and decrypt archive" << std::endl <<
     "-o (--output) <file>: Write data to file <file>" << std::endl <<
     "    When not specified, creates archive 'out.eak'" << std::endl <<
@@ -136,10 +138,10 @@ bool check_exists (const uint8_t* name)
     return check_exists(std::string((char*)name));
 }
 
-void write_file_entry (const std::string & filename, 
-                       std::ofstream & fout, 
-                       const struct stat filestat, 
-                       size_t blocksize) 
+void write_file_entry (const std::string & filename,
+                       std::ofstream & fout,
+                       const struct stat filestat,
+                       size_t blocksize)
 {
     std::ifstream fin(filename, std::ios_base::binary | std::ios_base::in);
 
@@ -147,15 +149,17 @@ void write_file_entry (const std::string & filename,
     std::string filename_encrypted;
     for (auto it = filename.begin(); it != filename.end(); it++)
         filename_encrypted += *it ^ get_gmm();
-    filename_encrypted += get_gmm(); // encrypted \0 in the end of string
+    filename_encrypted += get_gmm(); // encrypt \0 in the end of string
 
-    GOST3411::hmac_256_append((uint8_t*)filename.c_str(), filename.length()+1, 0);
+    GOST3411::hmac_256_append((uint8_t*)filename.c_str(),
+                              filename.length()+1,
+                              0);
     fout.write(filename_encrypted.c_str(), filename.length()+1);
 
     // direntry size (in bytes)
     char st_size[8];
     uint64_t long_st_size = filestat.st_size;
-    for (int i = 0; i < 8; i++) 
+    for (int i = 0; i < 8; i++)
     {
         st_size[i] = (long_st_size >> 8*i) & 0xFF;
     }
@@ -167,7 +171,7 @@ void write_file_entry (const std::string & filename,
     // direntry mode (dir, file etc.)
     char st_mode[8];
     uint64_t long_st_mode = filestat.st_mode;
-    for (int i = 0; i < 8; i++) 
+    for (int i = 0; i < 8; i++)
     {
         st_mode[i] = (long_st_mode >> 8*i) & 0xFF;
     }
@@ -178,11 +182,14 @@ void write_file_entry (const std::string & filename,
 
     do
     {
-        char* buf = new char[blocksize];                        // create new buffer for optimized IO
+        char* buf = new char[blocksize]; // create new buffer for optimized IO
         fin.read(buf, blocksize);
         GOST3411::hmac_256_append((uint8_t*)buf, fin.gcount(), 0);
+
+        // TODO: get_gmm is too slow, change it to sse/avx xor
         for (uint32_t i = 0; i < fin.gcount(); i++) buf[i] ^= get_gmm();
-        fout.write(buf, fin.gcount());                          // write block to archive
+
+        fout.write(buf, fin.gcount()); // write block to archive
         delete[] buf;
     }
     while (fin);
@@ -190,40 +197,47 @@ void write_file_entry (const std::string & filename,
     fin.close();
 }
 
-void scan_dir (const std::string & dirname, std::ofstream & fout, bool skip_dot, bool verbose) 
+void scan_dir (const std::string & dirname, std::ofstream & fout,
+               bool skip_dot, bool verbose)
 {
     DIR* dir = nullptr;
     struct dirent* entry = nullptr;
 
     dir = opendir(dirname.c_str());
-    if (dir == nullptr) 
+    if (dir == nullptr)
     {
-        std::cerr << "Error opening directory " << dirname << ": " << strerror(errno) << std::endl;
+        std::cerr << "Error opening directory " << dirname
+                  << ": " << strerror(errno) << std::endl;
         return;
     }
     if (verbose) std::cout << "Found directory: " <<  dirname << std::endl;
 
     // get entries from directory
-    while ((entry = readdir(dir)) != nullptr) 
+    while ((entry = readdir(dir)) != nullptr)
     {
         struct stat entryinfo;
         char* full_name = new char[PATH_MAX];
-        // concat dirname and entryname for lstat() and recursive call of scan_dir()
+        /* concat dirname and entryname for lstat()
+         * and recursive call of scan_dir()
+         */
         snprintf(full_name, PATH_MAX, "%s/%s", dirname.c_str(), entry->d_name);
         lstat(full_name, &entryinfo);
 
         // skipping . and .. entries
-        if (strncmp(entry->d_name, ".", PATH_MAX) && strncmp(entry->d_name, "..", PATH_MAX)) 
+        if (strncmp(entry->d_name, ".", PATH_MAX) &&
+            strncmp(entry->d_name, "..", PATH_MAX))
         {
             // if skip_dot flag set, then skipping entries starts with dot
-            if (skip_dot ? (strncmp(entry->d_name, ".", 1) != 0) : true) 
+            if (skip_dot ? (strncmp(entry->d_name, ".", 1) != 0) : true)
             {
                 // print info about entry
-                if (verbose) printf("%10u %s\n", (uint32_t)entryinfo.st_size, full_name);
+                if (verbose)
+                    printf("%10u %s\n", (uint32_t)entryinfo.st_size, full_name);
+
                 write_file_entry(full_name, fout, entryinfo, BLOCKSIZE);
-                
-                // if entry is a directory, then recursive call for this directory
-                if (S_ISDIR(entryinfo.st_mode)) 
+
+                // if entry is a directory, then recursive call for this dir
+                if (S_ISDIR(entryinfo.st_mode))
                     scan_dir(full_name, fout, skip_dot, verbose);
             }
         }
@@ -239,7 +253,7 @@ void pack (std::ofstream & fout, uint8_t* hmac_out)
         DIR* dir;
 
         // Delete this annoying double slash
-        if (*(global_args.input_files.at(i).rbegin()) == '/') 
+        if (*(global_args.input_files.at(i).rbegin()) == '/')
             global_args.input_files.at(i).pop_back();
 
         dir = opendir(global_args.input_files.at(i).c_str());
@@ -247,42 +261,61 @@ void pack (std::ofstream & fout, uint8_t* hmac_out)
         {
             if (global_args.archiver_verbose)
             {
-                std::cerr << "Error opening directory " << global_args.input_files.at(i) << ": " << strerror(errno) << std::endl;
-                std::cerr << "Trying " << global_args.input_files.at(i) << " as file...";
+                std::cerr << "Error opening directory "
+                          << global_args.input_files.at(i)
+                          << ": " << strerror(errno) << std::endl;
+                std::cerr << "Trying "
+                          << global_args.input_files.at(i)
+                          << " as file... ";
             }
 
-            std::ifstream fin(global_args.input_files.at(i), std::ios_base::out | std::ios_base::binary);
+            std::ifstream fin(global_args.input_files.at(i),
+                              std::ios_base::out | std::ios_base::binary);
             if (!fin)
             {
-                if (global_args.archiver_verbose) std::cerr << "failed :(\n";
+                if (global_args.archiver_verbose)
+                    std::cerr << "failed :(\n";
                 continue;
             }
             else
             {
-                if (global_args.archiver_verbose) std::cerr << "success!" << std::endl;
+                if (global_args.archiver_verbose)
+                    std::cerr << "success!" << std::endl;
                 fin.close();
                 struct stat entry_stat;
                 lstat(global_args.input_files.at(i).c_str(), &entry_stat);
-                write_file_entry(global_args.input_files.at(i), fout, entry_stat, BLOCKSIZE);
+
+                write_file_entry(global_args.input_files.at(i),
+                                fout, entry_stat, BLOCKSIZE);
             }
         }
         else
         {
-            if (global_args.archiver_verbose) printf("Found directory: %s\n", global_args.input_files.at(i).c_str());
+            if (global_args.archiver_verbose)
+                printf("Found directory: %s\n",
+                        global_args.input_files.at(i).c_str());
+
             struct stat entry_dir_stat;
             lstat(global_args.input_files.at(i).c_str(), &entry_dir_stat);
-            write_file_entry(global_args.input_files.at(i), fout, entry_dir_stat, BLOCKSIZE);
+
+            write_file_entry(global_args.input_files.at(i), fout,
+                             entry_dir_stat, BLOCKSIZE);
+
             closedir(dir);
-            scan_dir(global_args.input_files.at(i), fout, global_args.archiver_skip_dot, global_args.archiver_verbose);
+
+            scan_dir(global_args.input_files.at(i),
+                     fout,
+                     global_args.archiver_skip_dot,
+                     global_args.archiver_verbose);
         }
     }
     uint8_t* hmac = GOST3411::hmac_256_append((uint8_t*)"", 0, 1);
     std::copy(hmac, hmac+32, hmac_out);
 }
 
-void unpack (std::ifstream & fin, uint8_t* hmac_out) 
+void unpack (std::ifstream & fin, uint8_t* hmac_out)
 {
-    while (fin) 
+    while (fin)
     {
         char* name_buf = new char[PATH_MAX];
         int i = 0;
@@ -292,14 +325,14 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
             fin.read(&tmp, 1);
             tmp ^= get_gmm();
             name_buf[i++] = tmp;
-        } while (tmp != 0 && fin.good());
+        } while (tmp != 0 && fin.good()); // decrypt file name
         if (!fin.good()) break;
         GOST3411::hmac_256_append((uint8_t*)name_buf, i, 0);
 
         uint64_t size = 0;
         uint64_t mode = 0;
         fin.read((char*)&size, 8);
-        fin.read((char*)&mode, 8);
+        fin.read((char*)&mode, 8); // read encrypted file mode and size
         if (!fin.good()) break;
 
         for (i = 0; i < 8; i++)
@@ -312,7 +345,8 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
             ((uint8_t*)(&mode))[i] ^= get_gmm();
         }
 
-        if (size == 0 && mode == 0) 
+        if (size == 0 && mode == 0) /* if there is a 'null' entry,
+                                        then archive has ended */
         {
             delete[] name_buf;
             break;
@@ -321,15 +355,19 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
         GOST3411::hmac_256_append((uint8_t*)&size, 8, 0);
         GOST3411::hmac_256_append((uint8_t*)&mode, 8, 0);
 
-        if (!S_ISDIR(mode))
-            std::cout << name_buf << ": " << std::dec << size << " bytes, mode: " << std::oct << (uint32_t)mode << std::endl;
+        if (S_ISDIR(mode)) mkdir(name_buf, mode);
+        else
+        {
+            std::cout << name_buf << ": " 
+                      << std::dec << size << " bytes, mode: "
+                      << std::oct << (uint32_t)mode << std::endl;
 
-        if (S_ISDIR(mode)) mkdir(name_buf, mode); 
-        else {
-            if (!global_args.force && check_exists(name_buf)) 
+            if (!global_args.force && check_exists(name_buf))
             {
-                std::cout << "\x1B[101;97mAttention! File \x1B[44m " << name_buf
-                          << " \x1B[101;97m exists. Continue?\x1B[0m y/n " << std::endl;
+                std::cout << "\x1B[101;97mAttention! File \x1B[44m "
+                          << name_buf
+                          << " \x1B[101;97m exists. Continue?\x1B[0m y/n "
+                          << std::endl;
                 char choice = std::cin.get();
                 if (tolower(choice) != 'y')
                 {
@@ -337,14 +375,18 @@ void unpack (std::ifstream & fin, uint8_t* hmac_out)
                 }
             }
 
-            std::ofstream fout (name_buf, std::ios_base::binary | std::ios_base::out);
+            std::ofstream fout (name_buf,
+                                std::ios_base::binary | std::ios_base::out);
             chmod(name_buf, mode);
 
-            while (size > BLOCKSIZE) 
+            while (size > BLOCKSIZE) // read block from file and decrypt it
             {
                 char* read_buf = new char [BLOCKSIZE];
                 fin.read(read_buf, BLOCKSIZE);
+
+                // TODO: optimize gmm generation
                 for (int i = 0; i < BLOCKSIZE; i++) read_buf[i] ^= get_gmm();
+
                 fout.write(read_buf, BLOCKSIZE);
                 size -= BLOCKSIZE;
                 GOST3411::hmac_256_append((uint8_t*)read_buf, BLOCKSIZE, 0);
@@ -415,6 +457,13 @@ void get_params (int & argc, char** argv)
     }
 }
 
+/* TODO: TC26 recomendations about key derivation with 3411 */
+
+/*
+ * generate_256_random(): Read KEY_RNG_SIZE from random_source
+ * (/dev/urandom in most cases),
+ * then hash it on 3411 to get good key
+ */
 void generate_256_random (uint8_t* out, std::ifstream & random_source)
 {
     uint8_t* temp_data = new uint8_t[KEY_RNG_SIZE];
@@ -428,22 +477,24 @@ void generate_256_random (uint8_t* out, std::ifstream & random_source)
 
 void generate_keys (uint8_t* k1, uint8_t* k2, uint8_t* k3)
 {
-    std::ifstream random_source("/dev/urandom", std::ios::binary | std::ios::in);
-    generate_256_random(k1, random_source);
-    generate_256_random(k2, random_source);
-    generate_256_random(k3, random_source);
-    random_source.close();
+    std::ifstream random_src("/dev/urandom", std::ios::binary | std::ios::in);
+    generate_256_random(k1, random_src);
+    generate_256_random(k2, random_src);
+    generate_256_random(k3, random_src);
+    random_src.close();
 }
 
 void print_256bit_BE (uint8_t* vec)
 {
     for (int i = 31; i >= 0; i--)
     {
-        std::cout << std::hex << std::uppercase << std::setfill('0') << std::setw(2) << (int)vec[i];
+        std::cout << std::hex << std::uppercase
+                  << std::setfill('0') << std::setw(2) << (int)vec[i];
     }
     std::cout << std::endl;
 }
 
+/* TODO: add speed measuring for HMAC */
 void measure_speed (void)
 {
     GOST3412::lib_init();
@@ -451,6 +502,7 @@ void measure_speed (void)
     GOST3412::set_key(key);
     uint8_t sample_block[16] = {0};
 
+    // Encrypt `iterations` blocks of data to measure speed
     auto start = std::chrono::high_resolution_clock::now();
     int iterations = 20000;
     for (int i = 0; i < iterations; i++)
@@ -459,15 +511,19 @@ void measure_speed (void)
     }
     auto finish = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Estimated speed: " <<
-    16.0*iterations/std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()*953.67 << 
-    "MB/sec." << std::endl;
+    std::cout << "Estimated encryption speed: " <<
+    16.0 * iterations /
+    std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count() *
+    953.67 << "MB/sec." << std::endl;
 
     GOST3412::del_key();
     GOST3412::lib_fin();
 }
 
-int write_header(const size_t & data_size, uint8_t* data, std::ofstream & fout, const size_t & reserved)
+int write_header(const size_t & data_size,
+                 uint8_t* data,
+                 std::ofstream & fout,
+                 const size_t & reserved)
 {
     fout.write((char*)&data_size, 2);
     fout.write((char*)data, data_size);
@@ -476,7 +532,10 @@ int write_header(const size_t & data_size, uint8_t* data, std::ofstream & fout, 
     return reserved_pos;
 }
 
-void write_hmac(const size_t & data_size, const int whence, uint8_t* data, std::ofstream & fout)
+void write_hmac(const size_t & data_size,
+                const int whence,
+                uint8_t* data,
+                std::ofstream & fout)
 {
     fout.seekp(whence, fout.beg);
     fout.write((char*)data, data_size);
@@ -503,13 +562,22 @@ int main (int argc, char** argv)
     std::string pass = "";
     do
     {
-        pass = get_password("Enter password (8-64): ", global_args.password_asterisks);
+        pass = get_password("Enter password (8-64): ",
+                            global_args.password_asterisks);
         std::cout << std::endl;
     }
     while (pass.length() < 8 || pass.length() >= 64);
 
+    // TODO: store randomed salt in header
     std::cout << "Calculating elliptic key... ";
-    uint8_t* elliptic_key = pbkdf2(hmac_generate_512, 64, (uint8_t*)pass.c_str(), pass.length(), (uint8_t*)"salt", 4, 10000, 64);
+    uint8_t* elliptic_key = pbkdf2(hmac_generate_512,
+                                   64,
+                                   (uint8_t*)pass.c_str(),
+                                   pass.length(),
+                                   (uint8_t*)"salt",
+                                   4,
+                                   10000,
+                                   64);
     if (elliptic_key == nullptr)
     {
         abort("Some error get after password-based key derivation");
@@ -522,8 +590,10 @@ int main (int argc, char** argv)
 
         if (!global_args.force && check_exists(global_args.out_filename))
         {
-            std::cout << "\x1B[101;97mAttention! File \x1B[44m " << global_args.out_filename
-                      << " \x1B[101;97m exists. Continue?\x1B[0m y/n " << std::endl;
+            std::cout << "\x1B[101;97mAttention! File \x1B[44m "
+                      << global_args.out_filename
+                      << " \x1B[101;97m exists. Continue?\x1B[0m y/n "
+                      << std::endl;
             char choice = std::cin.get();
             if (tolower(choice) != 'y')
             {
@@ -535,7 +605,7 @@ int main (int argc, char** argv)
         std::cout << "Generating 3 256-bit keys... ";
         generate_keys(IV, KEY_KUZ, KEY_HMAC);
         std::cout << "done!\n";
-        
+
         std::cout << "Encrypting keys to header using password... ";
         uint8_t keys_concat[96];
         for (int i = 0; i < 32; i++)
@@ -558,7 +628,8 @@ int main (int argc, char** argv)
         std::cout << "done!\n";
 
         std::cout << "Opening file " << global_args.out_filename << "...\n";
-        std::ofstream fout(global_args.out_filename, std::ios_base::out | std::ios_base::binary);
+        std::ofstream fout(global_args.out_filename,
+                           std::ios_base::out | std::ios_base::binary);
 
         size_t hmac_size = 32;
         int hmac_place = write_header(header_size, header, fout, hmac_size);
@@ -577,22 +648,28 @@ int main (int argc, char** argv)
 
         std::cout << "Job's done!\n";
     }
+    /* Encrypt end */
 
     /* Decrypt */
-    else 
+    else
     {
-        std::cout << "Archive name: " << global_args.input_files.at(0) << std::endl;
+        std::cout << "Archive name: "
+                  << global_args.input_files.at(0)
+                  << std::endl;
         std::cout << "Opening " << global_args.input_files.at(0) << "...\n";
-        std::ifstream fin(global_args.input_files.at(0), std::ios_base::binary | std::ios_base::in);
+        std::ifstream fin(global_args.input_files.at(0),
+                          std::ios_base::binary | std::ios_base::in);
 
         size_t header_size_encrypted = 0, header_size = 0;
         fin.read((char*)&header_size_encrypted, 2);
 
         uint8_t* header_encrypted = new uint8_t[header_size_encrypted];
         fin.read((char*)header_encrypted, header_size_encrypted);
-        
+
         std::cout << "Decryting header... ";
-        uint8_t* header = elliptic::decrypt(header_encrypted, header_size_encrypted, header_size);
+        uint8_t* header = elliptic::decrypt(header_encrypted,
+                                            header_size_encrypted,
+                                            header_size);
         if (header == nullptr)
         {
             abort("Elliptic decryption failure. Incorrect password?");
@@ -614,7 +691,7 @@ int main (int argc, char** argv)
 
         for (int i = 0; i < 32; i++)
         {
-            if (hmac[i] != hmac_read[i]) 
+            if (hmac[i] != hmac_read[i])
             {
                 std::cout << "Expected: ";
                 print_256bit_BE(hmac_read);
@@ -625,7 +702,9 @@ int main (int argc, char** argv)
         }
         std::cout << "HMAC validation success!\nJob's done!\n";
 
-    } /* Decrypt */
+    }
+    /* Decrypt end */
 
     exit(EXIT_SUCCESS);
 }
+

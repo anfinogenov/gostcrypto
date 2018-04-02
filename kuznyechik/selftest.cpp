@@ -131,7 +131,7 @@ void speed_test(void)
     sample_block_vec.clear();
 
     auto start = std::chrono::high_resolution_clock::now();
-    int iterations = 16*1024*1024;
+    int iterations = 16*1024*1024; // 2^24 blocks of 16 byte data -> 256 MB of data tested
     for (int i = 0; i < iterations; i++)
     {
         GOST3412::encrypt_block(sample_block);
@@ -148,10 +148,10 @@ void gmm_speed_test(void)
 {
     init_gmm_generator(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data(),
                        hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
-    uint8_t sample_byte = 1;
+    uint8_t sample_byte = 0x01;
 
     auto start = std::chrono::high_resolution_clock::now();
-    int iterations = 128*1024*1024;
+    int iterations = 128*1024*1024; // 2^27 bytes of gamma generated -> 128 MB of data tested
     for (int i = 0; i < iterations; i++)
     {
         sample_byte ^= get_gmm();

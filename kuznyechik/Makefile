@@ -41,7 +41,7 @@ $(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*.hpp
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 selftest: $(LIB)$(DLIBNAME) $(SRC)selftest.cpp
-	$(GCC) $(SRC)selftest.cpp ../mode/ofb/ofbmode.cpp -L$(LIB) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o selftest
+	$(GCC) $(SRC)selftest.cpp ../mode/ofb/ofbmode.cpp -msse4 -L$(LIB) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o selftest
 	./selftest
 
 install: all
