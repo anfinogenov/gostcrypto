@@ -15,7 +15,7 @@ OBJECTCPP=$(LIBNAME)cpp.o
 SLIBNAME=lib$(LIBNAME).a
 DLIBNAME=lib$(LIBNAME).so
 
-GCCFLAGS=-Wall -pedantic -O2 -march=native
+GCCFLAGS=-Wall -Wextra -pedantic -Ofast -march=native
 GCC=$(CFLAGS) gcc -std=c99 $(GCCFLAGS)
 GPP=$(CFLAGS) g++ -std=c++11 $(GCCFLAGS)
 

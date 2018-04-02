@@ -1,7 +1,7 @@
 #include "../../kuznyechik/cipher_3412.hpp"
 #include <queue>
 
-#define POOL_SIZE 1024
+#define POOL_SIZE 128
 
 std::queue<uint8_t> pool;
 static uint8_t iv[32];
@@ -41,6 +41,7 @@ uint8_t get_gmm (void)
         fill_queue();
     }
     uint8_t gmm = pool.front();
+    pool.front() = 0x00;
     pool.pop();
     return gmm;
 }

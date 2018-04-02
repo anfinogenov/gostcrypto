@@ -1,4 +1,5 @@
 #include "cipher_3412.cpp"
+#include "../mode/ofb/ofbmode.hpp"
 #include <iostream>
 #include <iomanip>
 #include <chrono>
@@ -49,7 +50,7 @@ bool vector_cmp (const std::vector<uint8_t> a, const std::vector<uint8_t> b, con
     return true;
 }
 
-bool do_test (void (f)(const uint8_t*, uint8_t*), 
+bool do_test (void (f)(uint8_t*), 
               const std::vector<const char*> & strings, const char* init_value, const char* test_name)
 {
     std::vector<uint8_t> self_vec = hexstr_to_array(init_value);
@@ -62,7 +63,7 @@ bool do_test (void (f)(const uint8_t*, uint8_t*),
 
     for (auto it = gost_vec.begin(); it != gost_vec.end(); ++it)
     {
-        f(self_vec.data(), self_vec.data());
+        f(self_vec.data());
         if (vector_cmp(*it, self_vec, test_name) == false) return false;
     }
 
@@ -117,7 +118,7 @@ bool block_selftest (void)
     if (vector_cmp(data, gost_plain, "decrypt block") == false) return false;
 
     GOST3412::del_key();
-    std::cout << "Block encryption\\decryption tested successfully!\n";
+    std::cout << "Block encryption/decryption tested successfully!\n";
     return true;
 }
 
@@ -130,7 +131,7 @@ void speed_test(void)
     sample_block_vec.clear();
 
     auto start = std::chrono::high_resolution_clock::now();
-    int iterations = 400000;
+    int iterations = 16*1024*1024; // 2^24 blocks of 16 byte data -> 256 MB of data tested
     for (int i = 0; i < iterations; i++)
     {
         GOST3412::encrypt_block(sample_block);
@@ -138,28 +139,34 @@ void speed_test(void)
     auto finish = std::chrono::high_resolution_clock::now();
 
     GOST3412::del_key();
-    std::cout << "Speed test: " <<
+    std::cout << "Block speed test: " <<
     16.0*iterations/std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()*953.67 << 
+    "MB/sec." << std::endl;
+}
+
+void gmm_speed_test(void)
+{
+    init_gmm_generator(hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data(),
+                       hexstr_to_array("8899aabbccddeeff0011223344556677fedcba98765432100123456789abcdef").data());
+    uint8_t sample_byte = 0x01;
+
+    auto start = std::chrono::high_resolution_clock::now();
+    int iterations = 128*1024*1024; // 2^27 bytes of gamma generated -> 128 MB of data tested
+    for (int i = 0; i < iterations; i++)
+    {
+        sample_byte ^= get_gmm();
+    }
+    auto finish = std::chrono::high_resolution_clock::now();
+
+    fin_gmm_generator();
+    std::cout << "Gamma speed test: " <<
+    (double)iterations/std::chrono::duration_cast<std::chrono::nanoseconds>(finish-start).count()*953.67 << 
     "MB/sec." << std::endl;
 }
 
 int main (void) 
 {
     GOST3412::lib_init();
-    
-    do_test(GOST3412::do_s, std::vector<const char*> {
-        "b66cd8887d38e8d77765aeea0c9a7efc",
-        "559d8dd7bd06cbfe7e7b262523280d39",
-        "0c3322fed531e4630d80ef5c5a81c50b",
-        "23ae65633f842d29c5df529c13f5acda"}, 
-        "ffeeddccbbaa99881122334455667700", "S");
-
-    do_test(GOST3412::do_inv_s, std::vector<const char*> {
-        "0c3322fed531e4630d80ef5c5a81c50b",
-        "559d8dd7bd06cbfe7e7b262523280d39",
-        "b66cd8887d38e8d77765aeea0c9a7efc",
-        "ffeeddccbbaa99881122334455667700"},
-        "23ae65633f842d29c5df529c13f5acda", "S-inv");
 
     do_test(GOST3412::do_r, std::vector<const char*> {
         "94000000000000000000000000000001",
@@ -193,8 +200,8 @@ int main (void)
 
     key_selftest();
     block_selftest();
-
     speed_test();
+    gmm_speed_test();
 
     GOST3412::lib_fin();
     return 0;
