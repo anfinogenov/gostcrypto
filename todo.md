@@ -1,9 +1,7 @@
-- [x] GOST R 34.12-2015  
-- [x] GOST R 34.11-2012  
-- [ ] XTS(CTR) mode  
-- [x] archiver  
-- [x] pbkdf2  
-- [x] hmac  
-- [ ] multithreading  
-- [ ] compresser  
-- [ ] stegano  
+- [ ] Add AES
+- [ ] Add Blowfish
+- [ ] Add ChaCha20
+- [ ] Refactor magma
+- [ ] Refactor Streebog512
+- [ ] Add SHA2-512
+- [ ] Add SHA3?
