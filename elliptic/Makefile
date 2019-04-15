@@ -43,7 +43,7 @@ $(TMP)$(OBJECT): $(SRC)$(SOURCES) $(HDR)*
 	$(GCC) -fpic -c $(SRC)$(SOURCES) -o $(TMP)$(OBJECT)
 
 debug: $(LIB)$(DLIBNAME) $(SRC)debug.cpp
-	$(GCC) $(SRC)debug.cpp -L$(LIB) $(SHAREDLIBS) -l$(LIBNAME) -Wl,-rpath,$(LIB) -o debug
+	$(GCC) $(SRC)debug.cpp -L$(LIB) $(SHAREDLIBS) -l$(LIBNAME) -lgmp -lgmpxx -Wl,-rpath,$(LIB) -o debug
 
 install: all
 	install --mode=0644 -t $(PREFIXINCLUDE) $(HDR)$(HEADERS)

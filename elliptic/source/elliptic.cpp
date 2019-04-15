@@ -4,6 +4,7 @@
 #include <fstream>
 #include <gmp.h>
 #include <gmpxx.h>
+#include <vector>
 
 #include "../../hash/headers/hash_3411.h"
 #include "../../pbkdf2/headers/pbkdf2.h"
@@ -155,8 +156,15 @@ Point Point::operator * (const mpz_class& times) const
 
 //TODO: as hex
 #ifdef LENGTH64
-static const char* hex_p =
-    "4531ACD1FE0023C7550D267B6B2FEE80922B14B2FFB90F04D4EB7C09B5D2D15DF1D852741AF4704A0458047E80E4546D35B8336FAC224DD81664BBF528BE6373";
+static const std::vector<uint8_t> hex_p = { 0x45, 0x31, 0xAC, 0xD1, 0xFE, 0x00, 0x23, 0xC7,
+                                            0x55, 0x0D, 0x26, 0x7B, 0x6B, 0x2F, 0xEE, 0x80,
+                                            0x92, 0x2B, 0x14, 0xB2, 0xFF, 0xB9, 0x0F, 0x04,
+                                            0xD4, 0xEB, 0x7C, 0x09, 0xB5, 0xD2, 0xD1, 0x5D,
+                                            0xF1, 0xD8, 0x52, 0x74, 0x1A, 0xF4, 0x70, 0x4A,
+                                            0x04, 0x58, 0x04, 0x7E, 0x80, 0xE4, 0x54, 0x6D,
+                                            0x35, 0xB8, 0x33, 0x6F, 0xAC, 0x22, 0x4D, 0xD8,
+                                            0x16, 0x64, 0xBB, 0xF5, 0x28, 0xBE, 0x63, 0x73 };
+//    "4531ACD1FE0023C7550D267B6B2FEE80922B14B2FFB90F04D4EB7C09B5D2D15DF1D852741AF4704A0458047E80E4546D35B8336FAC224DD81664BBF528BE6373";
 static const char* hex_a =
     "7";
 static const char* hex_b =
@@ -208,7 +216,9 @@ static mpz_class g_const = 32;
 
 static void parameters_init(void)
 {
-    mpz_set_str(p.get_mpz_t(), hex_p, 16);
+    //TODO: 64 by #LENGTH64
+    mpz_import(p.get_mpz_t(), 64, 1, 1, -1, 0, hex_p.data());
+    //mpz_set_str(p.get_mpz_t(), hex_p, 16);
     mpz_set_str(a.get_mpz_t(), hex_a, 16);
     mpz_set_str(b.get_mpz_t(), hex_b, 16);
     mpz_set_str(m.get_mpz_t(), hex_m, 16);

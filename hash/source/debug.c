@@ -13,8 +13,42 @@ void printle(uint8_t* a, int len)
     printf("\n");
 }
 
-int main()
+void hash_file(const char* fname)
 {
+    //hash_generate_512_append(msg1, 20, 0);
+    //uint8_t* h2 = NULL; //= hash_generate_512_append(msg1+20, 63-20, 1);
+    //p(" hash 512:") printle(h2, 64);
+    //p(" real 512:") printle(r1, 64);
+
+    //free(h2);
+
+    uint8_t* h = NULL;
+    FILE* fi = fopen(fname, "rb");
+
+    size_t buffer_size = 1024*1024;
+    uint8_t* buffer = (uint8_t*)malloc(buffer_size*sizeof(uint8_t));
+    while (fread(buffer, sizeof(uint8_t), buffer_size, fi) > 0)
+    {
+        hash_generate_512_append(buffer, buffer_size, 0);
+    }
+
+    h = hash_generate_512_append(NULL, 0, 1);
+    p(" hash 512:") printle(h, 64);
+    //p(" real 512:") printle(r3, 64);
+
+    free(h);
+    return;
+
+}
+
+int main(int argc, char** argv)
+{
+    if (argc > 1)
+    {
+        hash_file(argv[1]);
+        return 0;
+    }
+
     uint8_t msg1[63] = {
         0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
         0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39,
@@ -92,7 +126,8 @@ int main()
 
     hash_generate_512_append(msg2, 22, 0);
     hash_generate_512_append(msg2+22, 44, 0);
-    h2 = hash_generate_512_append(msg2+66, 6, 1);
+    h2 = hash_generate_512_append(msg2+66, 6, 0);
+    h2 = hash_generate_512_append(NULL, 0, 1);
     p(" hash 512:") printle(h2, 64);
     p(" real 512:") printle(r3, 64);
 
