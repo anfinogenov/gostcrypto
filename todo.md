@@ -1,7 +1,3 @@
 - [ ] Add AES
-- [ ] Add Blowfish
-- [ ] Add ChaCha20
 - [ ] Refactor magma
-- [ ] Refactor Streebog512
-- [ ] Add SHA2-512
-- [ ] Add SHA3?
+- [ ] Add SHA2-512 (or 512/256 for current Streebog compability)
