@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace AES {
+namespace AES256 {
     /* Init constants */
     int lib_init (void);
 
